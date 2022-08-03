@@ -4,6 +4,10 @@
 #include <iostream>
 #include <android/log.h>
 
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
+
 using namespace std;
 using namespace cv;
 
@@ -52,7 +56,7 @@ Java_com_study_useopencvwithcmake_MainActivity_loadCascade(JNIEnv *env, jobject 
 }
 
 extern "C"
-JNIEXPORT void JNICALL
+JNIEXPORT int JNICALL
 Java_com_study_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz,
                                                                   jlong cascade_classifier_face,
                                                                   jlong cascade_classifier_eye,
@@ -80,7 +84,8 @@ Java_com_study_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz,
     __android_log_print(ANDROID_LOG_DEBUG, (char *) "native-lib :: ",
                         (char *) "face %d found ", faces.size());
 
-    for (int i = 0; i < faces.size(); i++) {
+    int faceSize = faces.size();
+    for (int i = 0; i < faceSize; i++) {
         double real_facesize_x = faces[i].x / resizeRatio;
         double real_facesize_y = faces[i].y / resizeRatio;
         double real_facesize_width = faces[i].width / resizeRatio;
@@ -106,5 +111,8 @@ Java_com_study_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz,
         }
     }
 
+    return faceSize;
+
 
 }
+
