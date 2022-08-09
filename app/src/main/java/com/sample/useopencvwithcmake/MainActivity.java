@@ -3,37 +3,56 @@ package com.sample.useopencvwithcmake;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.AssetManager;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
+import android.util.Base64;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Toast;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
+
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+
+import com.google.gson.Gson;
+
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
+
 import java.util.concurrent.Semaphore;
 
 
@@ -43,6 +62,12 @@ public class MainActivity extends AppCompatActivity
     private static final String TAG = "opencv";
     private Mat matInput;
     private Mat matResult;
+    private JSONObject jsonObject;
+
+
+    private Socket socket;
+    private BufferedReader bufferedReader;
+    private PrintWriter printWriter;
 
     // private CurrentDateTime currentDateTime;
 
@@ -178,7 +203,7 @@ public class MainActivity extends AppCompatActivity
             Log.d(TAG, "onResume :: Internal OpenCV library not found.");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_2_0, this, mLoaderCallback);
         } else {
-            Log.d(TAG, "onResum :: OpenCV library found inside package. Using it!");
+            Log.d(TAG, "onResume :: OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
         }
     }
@@ -189,6 +214,16 @@ public class MainActivity extends AppCompatActivity
 
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
+        
+        //연결 끊기
+        try {
+            socket.close();
+            bufferedReader.close();
+            printWriter.close();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+
     }
 
     // implements CameraBridgeViewBase.CvCameraViewListener2 메소드
@@ -225,12 +260,9 @@ public class MainActivity extends AppCompatActivity
                     matResult.getNativeObjAddr());
 
 
-            if (faceSize > 0) //&& (CurrentDateTime - previousTime) > 3000)
-            {
+            if (faceSize > 0) {
                 // 저장
                 saveImage();
-
-
             }
 
 
@@ -242,7 +274,6 @@ public class MainActivity extends AppCompatActivity
     }
 
 
-    //
     protected List<? extends CameraBridgeViewBase> getCameraViewList() {
         return Collections.singletonList(mOpenCvCameraView);
     }
@@ -325,16 +356,48 @@ public class MainActivity extends AppCompatActivity
                 try {
                     getWriteLock();
 
+                    //현재 시간
                     String date = dateName(System.currentTimeMillis());
-                    //제일 최근에 저장된 사진 이름 불러오기 , 문자열 중 에서 분,초 만 가져오기 ,if(초 먼저)
-                    // if(분 비교) 참이면 여 아래들 실행  if ( 현 date - 전 분초 >  3){}
+
+                    //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음)
+                    Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
+
+                    //메인쓰레드는 화면 비추느라 바쁘다.
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            //매트릭스 객체 비트맵 변환
+                            Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
+                            Utils.matToBitmap(matResult, bitmap);
+
+                            //비트맵을 base64로 인코딩
+                            String base64String = bitToString(bitmap);
+
+                            //json 으로 만들기
+                            jsonObject = new JSONObject();
+                            try {
+                                jsonObject.put("name", "안드로이드");
+                                jsonObject.put("date", date);
+                                jsonObject.put("picture", base64String);
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+
+                            //전송하기
+                            send(jsonObject);
+                        }
+                    }).start();
+
+
+                    //파일 경로 만들기
                     File path = new File(String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)));
                     path.mkdirs();
+
+                    //파일을 만들고
                     File file = new File(path, date + ".jpg");
                     String fileName = file.toString();
 
-
-                    Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
+                    //사진을 파일에 넣고 확인
                     boolean ret = Imgcodecs.imwrite(fileName, matResult);
                     if (ret) {
                         Log.d(TAG, "SUCCESS");
@@ -342,7 +405,7 @@ public class MainActivity extends AppCompatActivity
                         Log.d(TAG, "FAIL");
                     }
 
-                    //인텐트로 파일 저장
+                    //인텐트로 갤러리에 저장
                     Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
                     mediaScanIntent.setData(Uri.fromFile(file));
                     sendBroadcast(mediaScanIntent);
@@ -352,7 +415,7 @@ public class MainActivity extends AppCompatActivity
                     Toast.makeText(getApplicationContext(), "사진 저장 중 오류 발생", Toast.LENGTH_SHORT).show();
                 }
 
-                //진짜 실행
+
                 releaseWriteLock();
 
             }
@@ -364,4 +427,42 @@ public class MainActivity extends AppCompatActivity
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
         return dateFormat.format(date);
     }
+
+    private String bitToString(Bitmap bitmap) {
+        //바이트 보낼 통로
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
+        //비트맵을 바이트보낼 통로로 넣기
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+
+        //바이트 배열로 받기
+        byte[] image = byteArrayOutputStream.toByteArray();
+
+        //String 으로 변환
+        String profileImageBase64 = Base64.encodeToString(image, 0);
+
+        return profileImageBase64;
+    }
+
+    private void send(JSONObject jsonObject){
+        int port = 5001;
+        try {
+            socket = new Socket("localhost", port);
+            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            printWriter = new PrintWriter(socket.getOutputStream());
+
+            //VO 메시지 발송
+            printWriter.println(new Gson().toJson(jsonObject));
+            printWriter.flush();
+
+            //발송 후 메시지 받기
+            //System.out.println(br.readLine());
+
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+    }
+
+
+
 }
