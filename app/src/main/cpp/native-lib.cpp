@@ -1,14 +1,15 @@
 #include <jni.h>
-// #include <string>
+//#include <string>
 #include <opencv2/opencv.hpp>
-#include <android/log.h>
 #include <iostream>
-
-using namespace cv;
-using namespace std;
+#include <android/log.h>
 
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
+
+
+using namespace std;
+using namespace cv;
 
 float resize(Mat img_src, Mat &img_resize, int resize_width){
 
@@ -23,11 +24,13 @@ float resize(Mat img_src, Mat &img_resize, int resize_width){
     return scale;
 }
 
+
 extern "C"
 JNIEXPORT jlong JNICALL
 Java_com_sample_useopencvwithcmake_MainActivity_loadCascade(JNIEnv *env, jobject thiz,
                                                             jstring cascade_file_name) {
     // TODO: implement loadCascade()
+
     const char *nativeFileNameString = env->GetStringUTFChars(cascade_file_name, 0);
 
     string baseDir("");
@@ -52,7 +55,7 @@ Java_com_sample_useopencvwithcmake_MainActivity_loadCascade(JNIEnv *env, jobject
 
 
 extern "C"
-JNIEXPORT int JNICALL
+JNIEXPORT jint JNICALL
 Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz,
                                                        jlong cascade_classifier_face,
                                                        jlong cascade_classifier_eye,
@@ -108,4 +111,5 @@ Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz
     }
 
     return faceSize;
+
 }

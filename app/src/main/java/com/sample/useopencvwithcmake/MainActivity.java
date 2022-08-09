@@ -37,13 +37,15 @@ import org.opencv.imgproc.Imgproc;
 import java.util.concurrent.Semaphore;
 
 
-
 public class MainActivity extends AppCompatActivity
         implements CameraBridgeViewBase.CvCameraViewListener2 {
 
     private static final String TAG = "opencv";
     private Mat matInput;
     private Mat matResult;
+
+    // private CurrentDateTime currentDateTime;
+
 
     private CameraBridgeViewBase mOpenCvCameraView;
 
@@ -58,6 +60,7 @@ public class MainActivity extends AppCompatActivity
     public long cascadeClassifier_face = 0;
     public long cascadeClassifier_eye = 0;
 
+
     //세마포어를 사용하기 위한 코드
 
     private final Semaphore writeLock = new Semaphore(1);
@@ -69,6 +72,7 @@ public class MainActivity extends AppCompatActivity
     public void releaseWriteLock() {
         writeLock.release();
     }
+
 
     private void copyFile(String filename) {
 
@@ -99,6 +103,7 @@ public class MainActivity extends AppCompatActivity
 
     }
 
+
     private void read_cascade_file() {
         copyFile("haarcascade_frontalface_alt.xml");
         copyFile("haarcascade_eye_tree_eyeglasses.xml");
@@ -112,6 +117,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     static {
+
         System.loadLibrary("opencv_java4");
         System.loadLibrary("native-lib");
     }
@@ -132,7 +138,7 @@ public class MainActivity extends AppCompatActivity
             }
         }
     };
-    
+
     //화면이 세로모드에서 가로모드로 전환 시 onCreate함수가 다시 호출된다.
     // 만약 전역변수를 설정하고 그 값을 유지하며 항상 사용해야 하는 경우라도 화면이 세로모드에서 가로모드로 변경될 경우 전역변수에 설정한 값이 모두 초기화 된다. 이런 경우 변경된 값을 유지하고 싶다면  savedInstanceState을 이용하는 것이 좋다.
     @Override
@@ -311,7 +317,6 @@ public class MainActivity extends AppCompatActivity
     }
 
 
-
     void saveImage() {
         new Thread(new Runnable() {
             @Override
@@ -325,7 +330,7 @@ public class MainActivity extends AppCompatActivity
                     // if(분 비교) 참이면 여 아래들 실행  if ( 현 date - 전 분초 >  3){}
                     File path = new File(String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)));
                     path.mkdirs();
-                    File file = new File(path,date + ".jpg");
+                    File file = new File(path, date + ".jpg");
                     String fileName = file.toString();
 
 
@@ -343,7 +348,6 @@ public class MainActivity extends AppCompatActivity
                     sendBroadcast(mediaScanIntent);
 
 
-
                 } catch (InterruptedException e) {
                     Toast.makeText(getApplicationContext(), "사진 저장 중 오류 발생", Toast.LENGTH_SHORT).show();
                 }
@@ -355,10 +359,9 @@ public class MainActivity extends AppCompatActivity
         }).start();
     }
 
-    private String dateName(long dateTaken){
+    private String dateName(long dateTaken) {
         Date date = new Date(dateTaken);
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
         return dateFormat.format(date);
     }
-
 }

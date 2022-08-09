@@ -3,7 +3,7 @@
 
 # Sets the minimum version of CMake required to build the native library.
 
-cmake_minimum_required(VERSION 3.4.1)
+cmake_minimum_required(VERSION 3.18.1)
 
 set(pathPROJECT C:/Users/user/AndroidStudioProjects/UseOpenCVwithCMake) # 수정필요
 set(pathOPENCV ${pathPROJECT}/sdk)
@@ -49,12 +49,16 @@ find_library( # Sets the name of the path variable.
         # you want CMake to locate.
         log )
 
+find_library( android-lib android)
+
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in this
 # build script, prebuilt third-party libraries, or system libraries.
 
 target_link_libraries( # Specifies the target library.
         native-lib
+
+        ${android-lib}
 
         lib_opencv
 
