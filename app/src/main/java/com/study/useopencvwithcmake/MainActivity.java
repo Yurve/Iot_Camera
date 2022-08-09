@@ -1,8 +1,6 @@
 package com.study.useopencvwithcmake;
 
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -17,33 +15,27 @@ import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
-import android.provider.MediaStore;
+import android.os.Handler;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Log;
 import android.view.SurfaceView;
-import android.view.View;
 import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.RelativeLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.FileNameMap;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -52,27 +44,12 @@ import java.util.List;
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 
-import com.microsoft.signalr.HubConnection;
-import com.microsoft.signalr.HubConnectionBuilder;
-
-import org.opencv.android.BaseLoaderCallback;
-import org.opencv.android.CameraBridgeViewBase;
-import org.opencv.android.LoaderCallbackInterface;
-import org.opencv.android.OpenCVLoader;
-import org.opencv.core.Mat;
+import org.opencv.core.Rect;
+import org.opencv.core.Scalar;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.videoio.VideoCapture;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.Semaphore;
-
-import microsoft.aspnet.signalr.client.Platform;
-import microsoft.aspnet.signalr.client.http.android.AndroidPlatformComponent;
-
-import java.time.LocalDate;
-import java.time.ZoneId;
 
 public class MainActivity extends AppCompatActivity
         implements CameraBridgeViewBase.CvCameraViewListener2 {
@@ -80,6 +57,7 @@ public class MainActivity extends AppCompatActivity
     private static final String TAG = "opencv";
     private Mat matInput;
     private Mat matResult;
+
 
     // private CurrentDateTime currentDateTime;
 
@@ -110,7 +88,9 @@ public class MainActivity extends AppCompatActivity
     }
 
     public void releaseWriteLock() {
+
         writeLock.release();
+
     }
 
 
@@ -154,6 +134,8 @@ public class MainActivity extends AppCompatActivity
         Log.d(TAG, "read_cascade_file:");
 
         cascadeClassifier_eye = loadCascade(getFilesDir().getAbsolutePath() + "/haarcascade_eye_tree_eyeglasses.xml");
+
+
     }
 
     static {
@@ -251,12 +233,14 @@ public class MainActivity extends AppCompatActivity
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
         try {
+
             getWriteLock();
             matInput = inputFrame.rgba();
 
             if (matResult == null)
 
                 matResult = new Mat(matInput.rows(), matInput.cols(), matInput.type());
+
 
 
             Core.flip(matInput, matInput, 1);
@@ -267,18 +251,20 @@ public class MainActivity extends AppCompatActivity
 
             if (faceSize > 0) //&& (CurrentDateTime - previousTime) > 3000)
             {
-                // 저장
+
+
                 saveImage();
-
-
             }
+
+
+
 
 
         } catch (Exception e) {
             e.printStackTrace();
         }
         releaseWriteLock();
-        return matResult;
+        return matResult ;
     }
 
 
@@ -310,6 +296,8 @@ public class MainActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
         boolean havePermission = true;
+
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(CAMERA) != PackageManager.PERMISSION_GRANTED
                     || checkSelfPermission(WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
@@ -363,12 +351,14 @@ public class MainActivity extends AppCompatActivity
             @Override
             public void run() {
                 //파일 저장
+
                 try {
                     getWriteLock();
 
                     String date = dateName(System.currentTimeMillis());
                     //제일 최근에 저장된 사진 이름 불러오기 , 문자열 중 에서 분,초 만 가져오기 ,if(초 먼저)
                     // if(분 비교) 참이면 여 아래들 실행  if ( 현 date - 전 분초 >  3){}
+
                     File path = new File(String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)));
                     path.mkdirs();
                     File file = new File(path,date + ".jpg");
@@ -390,6 +380,8 @@ public class MainActivity extends AppCompatActivity
 
 
 
+
+
                 } catch (InterruptedException e) {
                     Toast.makeText(getApplicationContext(), "사진 저장 중 오류 발생", Toast.LENGTH_SHORT).show();
                 }
@@ -401,6 +393,8 @@ public class MainActivity extends AppCompatActivity
         }).start();
     }
 
+
+
     private String dateName(long dateTaken){
         Date date = new Date(dateTaken);
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
@@ -408,7 +402,27 @@ public class MainActivity extends AppCompatActivity
     }
 
 
+    //64를 이용한 전송
+    public void getBase64FromFile(String path)
+    {
+        Bitmap bmp = null;
+        ByteArrayOutputStream baos = null;
+        byte[] baat = null;
+        String encodeString = null;
+        try
+        {
+            bmp = BitmapFactory.decodeFile(path);
+            baos = new ByteArrayOutputStream();
+            bmp.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+            baat = baos.toByteArray();
+            encodeString = Base64.encodeToString(baat, Base64.DEFAULT);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
 
+    }
 
 
 }

@@ -42,12 +42,14 @@ android {
 }
 
 dependencies {
+    def work_version = "2.7.1"
+
     implementation files('libs/signalr-client-sdk-android.jar')
     implementation files('libs/signalr-client-sdk.jar')
 
+
     implementation 'androidx.appcompat:appcompat:1.4.2'
     implementation 'com.google.android.material:material:1.6.1'
-    implementation 'com.microsoft.signalr:signalr:1.0.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation project(path: ':sdk')
     testImplementation 'junit:junit:4.13.2'
