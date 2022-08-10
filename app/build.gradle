@@ -42,7 +42,6 @@ android {
 }
 
 dependencies {
-    def work_version = "2.7.1"
 
     implementation files('libs/signalr-client-sdk-android.jar')
     implementation files('libs/signalr-client-sdk.jar')
