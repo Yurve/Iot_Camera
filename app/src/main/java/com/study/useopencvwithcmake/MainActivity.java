@@ -54,6 +54,8 @@ import java.util.concurrent.Semaphore;
 public class MainActivity extends AppCompatActivity
         implements CameraBridgeViewBase.CvCameraViewListener2 {
 
+    //새로운 커밋 적어보기
+    
     private static final String TAG = "opencv";
     private Mat matInput;
     private Mat matResult;
