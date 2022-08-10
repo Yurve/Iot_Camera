@@ -44,8 +44,6 @@ import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
 import com.microsoft.signalr.HubConnectionState;
 
-import org.opencv.imgproc.Imgproc;
-
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.ObservableSource;
@@ -367,7 +365,7 @@ public class MainActivity extends AppCompatActivity
             try {
                 jsonObject.put("date", date);
                 jsonObject.put("name", "face");
-              //  jsonObject.put("picture", base64String);
+                jsonObject.put("picture", base64String);  //현재 너무 길어서 그런지 못보냄
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -376,8 +374,6 @@ public class MainActivity extends AppCompatActivity
             if(hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
                 String user = "android";
                 hubConnection.send("SendMessage", user, message);
-            }else{
-                Log.d("hubConnection","허브 커넥션이 안되용");
             }
 
         return new Gson().toJson(jsonObject);
@@ -393,15 +389,14 @@ public class MainActivity extends AppCompatActivity
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
-        //비트맵을 바이트보낼 통로로 넣기
-        bitmap.compress(Bitmap.CompressFormat.PNG, 70, byteArrayOutputStream);
+        //비트맵을 압축해서 전송
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 3, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
         //String 으로 반환
         return Base64.encodeToString(image, Base64.NO_WRAP);
-
     }
 
 
