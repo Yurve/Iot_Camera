@@ -4,14 +4,12 @@ package com.sample.useopencvwithcmake;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.DialogInterface;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Log;
 import android.view.SurfaceView;
@@ -31,14 +29,13 @@ import org.opencv.core.Mat;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
@@ -53,7 +50,6 @@ import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.ObservableSource;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import io.reactivex.rxjava3.exceptions.UndeliverableException;
 import io.reactivex.rxjava3.functions.Supplier;
 import io.reactivex.rxjava3.observers.DisposableObserver;
 import io.reactivex.rxjava3.plugins.RxJavaPlugins;
@@ -89,15 +85,9 @@ public class MainActivity extends AppCompatActivity
         AssetManager assetManager = this.getAssets();
         File outputFile = new File(getFilesDir() + "/" + filename);
 
-        InputStream inputStream = null;
-        OutputStream outputStream = null;
-
-
-
         try {
-            Log.d(TAG, "copyFile :: 다음 경로로 파일복사 " + outputFile.toString());
-            inputStream = assetManager.open(filename);
-            outputStream = new FileOutputStream(outputFile);
+            InputStream inputStream = assetManager.open(filename);
+            OutputStream outputStream = new FileOutputStream(outputFile);
 
             byte[] buffer = new byte[1024];
             int read;
@@ -105,12 +95,10 @@ public class MainActivity extends AppCompatActivity
                 outputStream.write(buffer, 0, read);
             }
             inputStream.close();
-            inputStream = null;
             outputStream.flush();
             outputStream.close();
-            outputStream = null;
         } catch (Exception e) {
-            Log.d(TAG, "copyFile :: 파일 복사 중 예외 발생 " + e.toString());
+           e.printStackTrace();
         }
 
     }
@@ -135,18 +123,13 @@ public class MainActivity extends AppCompatActivity
     }
 
     // 이코드는 왜 모든 예제에 쓰이는 것인가??????
-    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+    private final BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
-            switch (status) {
-                case LoaderCallbackInterface.SUCCESS: {
-                    mOpenCvCameraView.enableView();
-                }
-                break;
-                default: {
-                    super.onManagerConnected(status);
-                }
-                break;
+            if (status == LoaderCallbackInterface.SUCCESS) {
+                mOpenCvCameraView.enableView();
+            } else {
+                super.onManagerConnected(status);
             }
         }
     };
@@ -179,32 +162,7 @@ public class MainActivity extends AppCompatActivity
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.setCameraIndex(1); // front-camera(1),  back-camera(0)
 
-        RxJavaPlugins.setErrorHandler(e -> {
-            if (e instanceof UndeliverableException) {
-                e = e.getCause();
-            }
-            if ((e instanceof IOException) || (e instanceof SocketException)) {
-                // fine, irrelevant network problem or API that throws on cancellation
-                return;
-            }
-            if (e instanceof InterruptedException) {
-                // fine, some blocking code was interrupted by a dispose call
-                return;
-            }
-            if ((e instanceof NullPointerException) || (e instanceof IllegalArgumentException)) {
-                // that's likely a bug in the application
-                Thread.currentThread().getUncaughtExceptionHandler()
-                        .uncaughtException(Thread.currentThread(), e);
-                return;
-            }
-            if (e instanceof IllegalStateException) {
-                // that's a bug in RxJava or in a custom operator
-                Thread.currentThread().getUncaughtExceptionHandler()
-                        .uncaughtException(Thread.currentThread(), e);
-                return;
-            }
-            Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage());
-        });
+        RxJavaPlugins.setErrorHandler(e -> Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage()));
     }
 
 
@@ -232,6 +190,7 @@ public class MainActivity extends AppCompatActivity
                                }
                 )
         );
+
     }
 
 
@@ -370,29 +329,22 @@ public class MainActivity extends AppCompatActivity
                 && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
             onCameraPermissionGranted();
         } else {
-            showDialogForPermission("앱을 실행하려면 퍼미션을 허가하셔야합니다.");
+            showDialogForPermission();
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
 
     @TargetApi(Build.VERSION_CODES.M)
-    private void showDialogForPermission(String msg) {
+    private void showDialogForPermission() {
 
         AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setTitle("알림");
-        builder.setMessage(msg);
+        builder.setMessage("앱을 실행하려면 퍼미션을 허가하셔야합니다.");
         builder.setCancelable(false);
-        builder.setPositiveButton("예", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int id) {
-                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE}, CAMERA_PERMISSION_REQUEST_CODE);
-            }
-        });
-        builder.setNegativeButton("아니오", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface arg0, int arg1) {
-                finish();
-            }
-        });
+        builder.setPositiveButton("예", (dialog, id) ->
+                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE}, CAMERA_PERMISSION_REQUEST_CODE));
+        builder.setNegativeButton("아니오", (arg0, arg1) -> finish());
         builder.create().show();
     }
 
@@ -428,7 +380,7 @@ public class MainActivity extends AppCompatActivity
 
     private static String dateName(long dateTaken) {
         Date date = new Date(dateTaken);
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.KOREA);
         return dateFormat.format(date);
     }
 
