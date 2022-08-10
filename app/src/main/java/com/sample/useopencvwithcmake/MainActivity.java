@@ -5,23 +5,17 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
-import android.net.Uri;
-import android.nfc.Tag;
 import android.os.Bundle;
 import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.Environment;
-import android.os.Handler;
+import android.os.SystemClock;
 import android.util.Base64;
-import android.util.JsonReader;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONException;
@@ -34,16 +28,13 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.Socket;
+import java.net.SocketException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -56,30 +47,32 @@ import com.google.gson.Gson;
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
 
-import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.concurrent.Semaphore;
 
+import io.reactivex.rxjava3.annotations.NonNull;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.ObservableSource;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.exceptions.UndeliverableException;
+import io.reactivex.rxjava3.functions.Supplier;
+import io.reactivex.rxjava3.observers.DisposableObserver;
+import io.reactivex.rxjava3.plugins.RxJavaPlugins;
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
+
 
 public class MainActivity extends AppCompatActivity
         implements CameraBridgeViewBase.CvCameraViewListener2 {
-
     private static final String TAG = "opencv";
-    private Mat matInput;
-    private Mat matResult;
-    private JSONObject jsonObject;
+    private static Mat matResult;
 
-    private Socket socket;
-    private BufferedReader bufferedReader;
-    private PrintWriter printWriter;
-
-    HubConnection hubConnection;
-
-    // private CurrentDateTime currentDateTime;
-
+    private static HubConnection hubConnection;
 
     private CameraBridgeViewBase mOpenCvCameraView;
+
+    public final CompositeDisposable disposables = new CompositeDisposable();
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -95,13 +88,13 @@ public class MainActivity extends AppCompatActivity
 
     //세마포어를 사용하기 위한 코드
 
-    private final Semaphore writeLock = new Semaphore(1);
+    private static final Semaphore writeLock = new Semaphore(1);
 
-    public void getWriteLock() throws InterruptedException {
+    static public void getWriteLock() throws InterruptedException {
         writeLock.acquire();
     }
 
-    public void releaseWriteLock() {
+    public static void releaseWriteLock() {
         writeLock.release();
     }
 
@@ -113,6 +106,8 @@ public class MainActivity extends AppCompatActivity
 
         InputStream inputStream = null;
         OutputStream outputStream = null;
+
+
 
         try {
             Log.d(TAG, "copyFile :: 다음 경로로 파일복사 " + outputFile.toString());
@@ -181,7 +176,8 @@ public class MainActivity extends AppCompatActivity
         hubConnection = HubConnectionBuilder.create(input).build();
 
         hubConnection.start().blockingAwait();
-        Toast.makeText(getApplicationContext(),"바로 연결",Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), "연결 성공", Toast.LENGTH_SHORT).show();
+
 
         setContentView(R.layout.activity_main);
 
@@ -198,9 +194,73 @@ public class MainActivity extends AppCompatActivity
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.setCameraIndex(1); // front-camera(1),  back-camera(0)
 
+        RxJavaPlugins.setErrorHandler(e -> {
+            if (e instanceof UndeliverableException) {
+                e = e.getCause();
+            }
+            if ((e instanceof IOException) || (e instanceof SocketException)) {
+                // fine, irrelevant network problem or API that throws on cancellation
+                return;
+            }
+            if (e instanceof InterruptedException) {
+                // fine, some blocking code was interrupted by a dispose call
+                return;
+            }
+            if ((e instanceof NullPointerException) || (e instanceof IllegalArgumentException)) {
+                // that's likely a bug in the application
+                Thread.currentThread().getUncaughtExceptionHandler()
+                        .uncaughtException(Thread.currentThread(), e);
+                return;
+            }
+            if (e instanceof IllegalStateException) {
+                // that's a bug in RxJava or in a custom operator
+                Thread.currentThread().getUncaughtExceptionHandler()
+                        .uncaughtException(Thread.currentThread(), e);
+                return;
+            }
+            Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage());
+        });
+    }
 
 
+    void onScheduler() {
+        disposables.add(sendImage()
+                //run on a background thread
+                .subscribeOn(Schedulers.io())
+                // Be notified on the main thread
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeWith(new DisposableObserver<String>() {
+                                   @Override
+                                   public void onNext(@NonNull String msg) {
+                                       Log.d(TAG, "onNext(" + msg + ")");
+                                   }
 
+                                   @Override
+                                   public void onError(@NonNull Throwable e) {
+                                       Log.e(TAG, "onError()", e);
+                                   }
+
+                                   @Override
+                                   public void onComplete() {
+                                       Log.d(TAG, "onComplete()");
+                                   }
+                               }
+                )
+        );
+    }
+
+
+    static Observable <String> sendImage(){
+        return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
+            @Override
+            public ObservableSource<? extends String> get() throws Throwable {
+                // Do some long running operation
+
+                String msg = saveImage();
+
+                return Observable.just(msg);
+            }
+        });
     }
 
 
@@ -232,14 +292,10 @@ public class MainActivity extends AppCompatActivity
             mOpenCvCameraView.disableView();
 
         //연결 끊기
-        try {
-            socket.close();
-            bufferedReader.close();
-            printWriter.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        hubConnection.stop();
 
+        //rxjava 통로 비우기
+        disposables.clear();
     }
 
     // implements CameraBridgeViewBase.CvCameraViewListener2 메소드
@@ -265,7 +321,7 @@ public class MainActivity extends AppCompatActivity
 
 
             getWriteLock();
-            matInput = inputFrame.rgba();
+            Mat matInput = inputFrame.rgba();
 
             if (matResult == null)
 
@@ -279,8 +335,7 @@ public class MainActivity extends AppCompatActivity
 
 
             if (faceSize > 0) {
-                // 저장
-                saveImage();
+                onScheduler();
             }
 
 
@@ -366,94 +421,48 @@ public class MainActivity extends AppCompatActivity
     }
 
 
-    void saveImage() {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                //파일 저장
-                try {
-                    getWriteLock();
+    static String saveImage() {
+        try {
+            getWriteLock();
+        }catch (InterruptedException e){
+            e.printStackTrace();
+        }
 
-                    //현재 시간
-                    String date = dateName(System.currentTimeMillis());
+            //현재 시간
+            String date = dateName(System.currentTimeMillis());
 
-                    //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음)
-                    Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
+            //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음)
+            Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
 
-                    //메인쓰레드는 화면 비추느라 바쁘다.
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            //매트릭스 객체 비트맵 변환
-                            Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
-                            Utils.matToBitmap(matResult, bitmap);
+            //매트릭스 객체 비트맵 변환
+            Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
+            Utils.matToBitmap(matResult, bitmap);
 
-                            //비트맵을 base64로 인코딩
-                            String base64String = bitToString(bitmap);
+            //비트맵을 base64로 인코딩
+            String base64String = bitToString(bitmap);
 
-                            //json 으로 만들기
-                            jsonObject = new JSONObject();
-                            try {
-                                jsonObject.put("name", "안드로이드");
-                                jsonObject.put("date", date);
-                                jsonObject.put("picture", base64String);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
-
-                            String message = new Gson().toJson(jsonObject);
-
-                            //signalR 보내기
-                            String user = "android";
-                            hubConnection.send("SendMessage", user, message);
-                        }
-                    }).start();
-
-
-                    /*
-
-                    //파일 경로 만들기
-                    File path = new File(String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)));
-                    path.mkdirs();
-
-                    //파일을 만들고
-                    File file = new File(path, date + ".jpg");
-                    String fileName = file.toString();
-
-                    //사진을 파일에 넣고 확인
-                    boolean ret = Imgcodecs.imwrite(fileName, matResult);
-                    if (ret) {
-                        Log.d(TAG, "SUCCESS");
-                    } else {
-                        Log.d(TAG, "FAIL");
-                    }
-
-                    //인텐트로 갤러리에 저장
-                    Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-                    mediaScanIntent.setData(Uri.fromFile(file));
-                    sendBroadcast(mediaScanIntent);
-
-                     */
-
-
-                } catch (InterruptedException e) {
-                    Toast.makeText(getApplicationContext(), "사진 저장 중 오류 발생", Toast.LENGTH_SHORT).show();
-                }
-
-
-                releaseWriteLock();
-
+            //json 으로 만들기
+            JSONObject jsonObject = new JSONObject();
+            try {
+                jsonObject.put("date", date);
+                jsonObject.put("name", "face");
+                jsonObject.put("picture", base64String);
+            } catch (JSONException e) {
+                e.printStackTrace();
             }
-        }).start();
+
+
+        releaseWriteLock();
+        return new Gson().toJson(jsonObject);
     }
 
-    private String dateName(long dateTaken) {
+    private static String dateName(long dateTaken) {
         Date date = new Date(dateTaken);
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
         return dateFormat.format(date);
     }
 
-    private String bitToString(Bitmap bitmap) {
+    private static String bitToString(Bitmap bitmap) {
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
@@ -463,10 +472,9 @@ public class MainActivity extends AppCompatActivity
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
-        //String 으로 변환
-        String profileImageBase64 = Base64.encodeToString(image, 0);
+        //String 으로 반환
+        return Base64.encodeToString(image, Base64.NO_WRAP);
 
-        return profileImageBase64;
     }
 
 
