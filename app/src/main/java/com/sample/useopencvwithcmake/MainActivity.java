@@ -9,15 +9,19 @@ import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.nfc.Tag;
 import android.os.Bundle;
 import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
 import android.util.Base64;
+import android.util.JsonReader;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.json.JSONException;
@@ -49,6 +53,8 @@ import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 
 import com.google.gson.Gson;
+import com.microsoft.signalr.HubConnection;
+import com.microsoft.signalr.HubConnectionBuilder;
 
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
@@ -64,10 +70,11 @@ public class MainActivity extends AppCompatActivity
     private Mat matResult;
     private JSONObject jsonObject;
 
-
     private Socket socket;
     private BufferedReader bufferedReader;
     private PrintWriter printWriter;
+
+    HubConnection hubConnection;
 
     // private CurrentDateTime currentDateTime;
 
@@ -170,8 +177,13 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        setContentView(R.layout.activity_main);
+        String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
+        hubConnection = HubConnectionBuilder.create(input).build();
 
+        hubConnection.start().blockingAwait();
+        Toast.makeText(getApplicationContext(),"바로 연결",Toast.LENGTH_SHORT).show();
+
+        setContentView(R.layout.activity_main);
 
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -180,10 +192,14 @@ public class MainActivity extends AppCompatActivity
 
         setContentView(R.layout.activity_main);
 
+
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.activity_surface_view);
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.setCameraIndex(1); // front-camera(1),  back-camera(0)
+
+
+
 
     }
 
@@ -214,13 +230,13 @@ public class MainActivity extends AppCompatActivity
 
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
-        
+
         //연결 끊기
         try {
             socket.close();
             bufferedReader.close();
             printWriter.close();
-        }catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -246,6 +262,8 @@ public class MainActivity extends AppCompatActivity
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
         try {
+
+
             getWriteLock();
             matInput = inputFrame.rgba();
 
@@ -383,11 +401,16 @@ public class MainActivity extends AppCompatActivity
                                 e.printStackTrace();
                             }
 
-                            //전송하기
-                            send(jsonObject);
+                            String message = new Gson().toJson(jsonObject);
+
+                            //signalR 보내기
+                            String user = "android";
+                            hubConnection.send("SendMessage", user, message);
                         }
                     }).start();
 
+
+                    /*
 
                     //파일 경로 만들기
                     File path = new File(String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)));
@@ -409,6 +432,8 @@ public class MainActivity extends AppCompatActivity
                     Intent mediaScanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
                     mediaScanIntent.setData(Uri.fromFile(file));
                     sendBroadcast(mediaScanIntent);
+
+                     */
 
 
                 } catch (InterruptedException e) {
@@ -443,26 +468,6 @@ public class MainActivity extends AppCompatActivity
 
         return profileImageBase64;
     }
-
-    private void send(JSONObject jsonObject){
-        int port = 5001;
-        try {
-            socket = new Socket("localhost", port);
-            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            printWriter = new PrintWriter(socket.getOutputStream());
-
-            //VO 메시지 발송
-            printWriter.println(new Gson().toJson(jsonObject));
-            printWriter.flush();
-
-            //발송 후 메시지 받기
-            //System.out.println(br.readLine());
-
-        }catch (IOException e){
-            e.printStackTrace();
-        }
-    }
-
 
 
 }

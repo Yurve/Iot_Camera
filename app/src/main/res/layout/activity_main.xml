@@ -7,8 +7,8 @@
     tools:context=".MainActivity">
 
     <org.opencv.android.JavaCameraView
+        android:id="@+id/activity_surface_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:id="@+id/activity_surface_view" />
+        android:layout_height="match_parent" />
 
 </LinearLayout>
