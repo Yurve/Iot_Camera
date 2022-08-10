@@ -14,7 +14,6 @@ import android.util.Base64;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
-import android.widget.Toast;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -43,6 +42,7 @@ import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import com.google.gson.Gson;
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
+import com.microsoft.signalr.HubConnectionState;
 
 import org.opencv.imgproc.Imgproc;
 
@@ -142,9 +142,7 @@ public class MainActivity extends AppCompatActivity
 
         String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
         hubConnection = HubConnectionBuilder.create(input).build();
-
         hubConnection.start().blockingAwait();
-        Toast.makeText(getApplicationContext(), "연결 성공", Toast.LENGTH_SHORT).show();
 
 
         setContentView(R.layout.activity_main);
@@ -244,7 +242,7 @@ public class MainActivity extends AppCompatActivity
 
     // implements CameraBridgeViewBase.CvCameraViewListener2 메소드
     /* camera started : 카메라 프리뷰가 시작되면 호출된다.
-       camera viewstopped : 카메라 프리뷰가 어떤 이유로 멈추면 호출된다.
+       camera viewStopped : 카메라 프리뷰가 어떤 이유로 멈추면 호출된다.
        camera frame : 프레임 전달이 필요한 경우 호출 된다.
     */
     @Override
@@ -354,8 +352,8 @@ public class MainActivity extends AppCompatActivity
             //현재 시간
             String date = dateName(System.currentTimeMillis());
 
-            //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음)
-            Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
+            //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
+           // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
 
             //매트릭스 객체 비트맵 변환
             Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
@@ -369,11 +367,18 @@ public class MainActivity extends AppCompatActivity
             try {
                 jsonObject.put("date", date);
                 jsonObject.put("name", "face");
-                jsonObject.put("picture", base64String);
+              //  jsonObject.put("picture", base64String);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
 
+            String message = new Gson().toJson(jsonObject);
+            if(hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
+                String user = "android";
+                hubConnection.send("SendMessage", user, message);
+            }else{
+                Log.d("hubConnection","허브 커넥션이 안되용");
+            }
 
         return new Gson().toJson(jsonObject);
     }
@@ -389,7 +394,7 @@ public class MainActivity extends AppCompatActivity
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         //비트맵을 바이트보낼 통로로 넣기
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+        bitmap.compress(Bitmap.CompressFormat.PNG, 70, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
