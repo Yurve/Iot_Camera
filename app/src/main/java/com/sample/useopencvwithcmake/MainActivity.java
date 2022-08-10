@@ -49,8 +49,6 @@ import com.microsoft.signalr.HubConnectionBuilder;
 
 import org.opencv.imgproc.Imgproc;
 
-import java.util.concurrent.Semaphore;
-
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.ObservableSource;
@@ -84,19 +82,6 @@ public class MainActivity extends AppCompatActivity
 
     public long cascadeClassifier_face = 0;
     public long cascadeClassifier_eye = 0;
-
-
-    //세마포어를 사용하기 위한 코드
-
-    private static final Semaphore writeLock = new Semaphore(1);
-
-    static public void getWriteLock() throws InterruptedException {
-        writeLock.acquire();
-    }
-
-    public static void releaseWriteLock() {
-        writeLock.release();
-    }
 
 
     private void copyFile(String filename) {
@@ -317,10 +302,6 @@ public class MainActivity extends AppCompatActivity
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
-        try {
-
-
-            getWriteLock();
             Mat matInput = inputFrame.rgba();
 
             if (matResult == null)
@@ -338,11 +319,6 @@ public class MainActivity extends AppCompatActivity
                 onScheduler();
             }
 
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        releaseWriteLock();
         return matResult;
     }
 
@@ -422,11 +398,6 @@ public class MainActivity extends AppCompatActivity
 
 
     static String saveImage() {
-        try {
-            getWriteLock();
-        }catch (InterruptedException e){
-            e.printStackTrace();
-        }
 
             //현재 시간
             String date = dateName(System.currentTimeMillis());
@@ -452,7 +423,6 @@ public class MainActivity extends AppCompatActivity
             }
 
 
-        releaseWriteLock();
         return new Gson().toJson(jsonObject);
     }
 
