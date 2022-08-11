@@ -1,9 +1,12 @@
 package com.sample.useopencvwithcmake;
 
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.Manifest;
+import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.os.Bundle;
@@ -14,6 +17,7 @@ import android.util.Base64;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,6 +32,7 @@ import org.opencv.core.Mat;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
@@ -36,6 +41,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 
@@ -58,13 +64,23 @@ import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 public class MainActivity extends AppCompatActivity
         implements CameraBridgeViewBase.CvCameraViewListener2 {
     private static final String TAG = "opencv";
-    private static Mat matResult;
 
-    private static HubConnection hubConnection;
+    //사진 매트릭스 객체
+    private Mat matResult;
 
+    //SignalR 통신
+    private HubConnection hubConnection;
+
+    //화면에 보여주는 카메라뷰
     private CameraBridgeViewBase mOpenCvCameraView;
 
+    //rxJava 를 통한 비동기 처리
     public final CompositeDisposable disposables = new CompositeDisposable();
+
+
+    //블루투스 통신 클래스
+    Bluetooth_connect bluetooth_connect;
+
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -96,11 +112,10 @@ public class MainActivity extends AppCompatActivity
             outputStream.flush();
             outputStream.close();
         } catch (Exception e) {
-           e.printStackTrace();
+            e.printStackTrace();
         }
 
     }
-
 
     private void read_cascade_file() {
         copyFile("haarcascade_frontalface_alt.xml");
@@ -138,9 +153,20 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        //signalR 서버 접속하기
         String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
+
+        bluetooth_connect = new Bluetooth_connect(this);
+
+        //블루투스 키기 및 확인
+        bluetooth_connect.bluetoothOn();
+        bluetooth_connect.bluetoothCheck();
+
+        //페어링 된 기기 알람띄우기
+        bluetooth_connect.listPairedDevices();
+
 
 
         setContentView(R.layout.activity_main);
@@ -158,11 +184,14 @@ public class MainActivity extends AppCompatActivity
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.setCameraIndex(1); // front-camera(1),  back-camera(0)
 
+        sensorScheduler();
+
         RxJavaPlugins.setErrorHandler(e -> Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage()));
     }
 
 
-    void onScheduler() {
+    //사진 저장 비동기 처리
+    public void onScheduler() {
         disposables.add(sendImage()
                 //run on a background thread
                 .subscribeOn(Schedulers.io())
@@ -186,22 +215,77 @@ public class MainActivity extends AppCompatActivity
                                }
                 )
         );
-
     }
 
-
-    static Observable <String> sendImage(){
+    //public? static? 상관없는듯
+    public Observable<String> sendImage() {
         return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
             @Override
             public ObservableSource<? extends String> get() throws Throwable {
                 // Do some long running operation
 
-                String msg = saveImage();
+                String message = saveImage();
 
-                return Observable.just(msg);
+
+                //SignalR 전송
+                if (hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
+                    String user = "android";
+                    hubConnection.send("SendMessage", user, message);
+                }
+
+                return Observable.just(message);
             }
         });
     }
+
+    //서버에서 서보모터 제어 신호 비동기처리
+    public void sensorScheduler(){
+        disposables.add(serverToPi4()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeWith(new DisposableObserver<String>()
+                {
+                    @Override
+                    public void onNext(@NonNull String s) {
+                        Log.d(TAG, "onNext(" + s + ")");
+                    }
+
+                    @Override
+                    public void onError(@NonNull Throwable e) {
+                        Log.e(TAG, "onError()", e);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        Log.d(TAG, "onComplete()");
+                    }
+                })
+        );
+    }
+
+    //서버에서 signalR로 받아서 라즈베리파이로 블루투스 송신
+    public Observable<String> serverToPi4(){
+        return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
+            @Override
+            public ObservableSource<? extends String> get() throws Throwable {
+                // Do some long running operation
+
+                hubConnection.on("ReceiveMessage",(user,message) ->{
+                    //블루투스 제어
+                    if(bluetooth_connect.checkThread()){
+                        try {
+                            bluetooth_connect.write(message);
+                        }catch (IOException e){
+                            e.printStackTrace();
+                        }
+                    }
+                },String.class, String.class);
+
+                return null;
+            }
+        });
+    }
+
 
 
     @Override
@@ -226,16 +310,23 @@ public class MainActivity extends AppCompatActivity
 
 
     public void onDestroy() {
-        super.onDestroy();
-
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
 
-        //연결 끊기
+        //블루투스 연결 끊기
+        try {
+            bluetooth_connect.close();
+        }catch (IOException e){
+            e.printStackTrace();
+        }
+
+        //서버 연결 끊기
         hubConnection.stop();
 
         //rxjava 통로 비우기
         disposables.clear();
+
+        super.onDestroy();
     }
 
     // implements CameraBridgeViewBase.CvCameraViewListener2 메소드
@@ -257,22 +348,22 @@ public class MainActivity extends AppCompatActivity
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
-            Mat matInput = inputFrame.rgba();
+        Mat matInput = inputFrame.rgba();
 
-            if (matResult == null)
+        if (matResult == null)
 
-                matResult = new Mat(matInput.rows(), matInput.cols(), matInput.type());
-
-
-            Core.flip(matInput, matInput, 1);
-
-            int faceSize = detect(cascadeClassifier_face, cascadeClassifier_eye, matInput.getNativeObjAddr(),
-                    matResult.getNativeObjAddr());
+            matResult = new Mat(matInput.rows(), matInput.cols(), matInput.type());
 
 
-            if (faceSize > 0) {
-                onScheduler();
-            }
+        Core.flip(matInput, matInput, 1);
+
+        int faceSize = detect(cascadeClassifier_face, cascadeClassifier_eye, matInput.getNativeObjAddr(),
+                matResult.getNativeObjAddr());
+
+
+        if (faceSize > 0) {
+            onScheduler();
+        }
 
         return matResult;
     }
@@ -295,7 +386,6 @@ public class MainActivity extends AppCompatActivity
         for (CameraBridgeViewBase cameraBridgeViewBase : cameraViews) {
             if (cameraBridgeViewBase != null) {
                 cameraBridgeViewBase.setCameraPermissionGranted();
-
                 read_cascade_file();
             }
         }
@@ -307,8 +397,9 @@ public class MainActivity extends AppCompatActivity
         boolean havePermission = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(CAMERA) != PackageManager.PERMISSION_GRANTED
-                    || checkSelfPermission(WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE}, CAMERA_PERMISSION_REQUEST_CODE);
+                    || checkSelfPermission(WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission(BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE, BLUETOOTH_CONNECT}, CAMERA_PERMISSION_REQUEST_CODE);
                 havePermission = false;
             }
         }
@@ -345,52 +436,46 @@ public class MainActivity extends AppCompatActivity
     }
 
 
-    static String saveImage() {
+    public String saveImage() {
 
-            //현재 시간
-            String date = dateName(System.currentTimeMillis());
+        //현재 시간
+        String date = dateName(System.currentTimeMillis());
 
-            //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
-           // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
+        //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
+        // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
 
-            //매트릭스 객체 비트맵 변환
-            Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
-            Utils.matToBitmap(matResult, bitmap);
+        //매트릭스 객체 비트맵 변환
+        Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(matResult, bitmap);
 
-            //비트맵을 base64로 인코딩
-            String base64String = bitToString(bitmap);
+        //비트맵을 base64로 인코딩
+        String base64String = bitToString(bitmap);
 
-            //json 으로 만들기
-            JSONObject jsonObject = new JSONObject();
-            try {
-                jsonObject.put("date", date);
-                jsonObject.put("name", "face");
-                jsonObject.put("picture", base64String);  //현재 너무 길어서 그런지 못보냄
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-
-            String message = new Gson().toJson(jsonObject);
-            if(hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
-                String user = "android";
-                hubConnection.send("SendMessage", user, message);
-            }
+        //json 으로 만들기
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("date", date);
+            jsonObject.put("eventType", "face");
+            jsonObject.put("picture", base64String);  //현재 너무 길어서 그런지 못보냄
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
 
         return new Gson().toJson(jsonObject);
     }
 
-    private static String dateName(long dateTaken) {
+    private String dateName(long dateTaken) {
         Date date = new Date(dateTaken);
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.KOREA);
         return dateFormat.format(date);
     }
 
-    private static String bitToString(Bitmap bitmap) {
+    private String bitToString(Bitmap bitmap) {
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         //비트맵을 압축해서 전송
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 3, byteArrayOutputStream);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 1, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
@@ -400,4 +485,6 @@ public class MainActivity extends AppCompatActivity
     }
 
 
+
+    
 }
