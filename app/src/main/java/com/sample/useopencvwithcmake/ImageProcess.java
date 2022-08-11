@@ -1,7 +1,6 @@
 package com.sample.useopencvwithcmake;
 
 import android.graphics.Bitmap;
-import android.provider.ContactsContract;
 import android.util.Base64;
 
 import com.google.gson.Gson;
@@ -16,6 +15,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
+//이미지 가공을 위한 메소드
 public class ImageProcess {
     Mat matResult;
 
