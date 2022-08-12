@@ -3,11 +3,13 @@ package com.sample.useopencvwithcmake;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -140,7 +142,7 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
+        String input = "http://ictrobot.hknu.ac.kr:8086/eventhub";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
@@ -184,20 +186,18 @@ public class MainActivity extends AppCompatActivity
         //객체 생성
         permissionSupport = new PermissionSupport(this, this);
 
-        //요청이 안되어있으면
-        if (!permissionSupport.checkPermission()) {
-            //권한 요청
-            permissionSupport.checkPermission();
-        }
+        permissionSupport.onCheckPermission();
     }
 
-    // Request Permission 대한 결과 값 받고나서
+    // permissionCheck 대한 결과 값 받고나서
     @Override
     public void onRequestPermissionsResult(int requestCode, @androidx.annotation.NonNull String[] permissions, @androidx.annotation.NonNull int[] grantResults) {
-        //여기서도 리턴이 false로 들어온다면 (사용자가 권한 허용 거부)
-        if (!permissionSupport.permissionResult(requestCode, permissions, grantResults)) {
-            //다시 permissions 요청
-            permissionSupport.requestPermission();
+        if (requestCode == PermissionSupport.MULTIPLE_PERMISSIONS) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "권한 확인", Toast.LENGTH_SHORT).show();
+            } else {
+               Log.d(TAG,"권한 취소");
+            }
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
@@ -236,15 +236,16 @@ public class MainActivity extends AppCompatActivity
             public ObservableSource<? extends String> get() throws Throwable {
                 // Do some long running operation
 
-                String message = imageProcess.saveImage();
+                String date = imageProcess.saveTime();
+                String encodedImage = imageProcess.saveImage();
 
                 //SignalR 전송
                 if (hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
-                    String user = "android";
-                    hubConnection.send("SendMessage", user, message);
+                    String type = "eventType";
+                    hubConnection.send("SendEventAsBase64",date,type,encodedImage);
                 }
 
-                return Observable.just(message);
+                return Observable.just(encodedImage);
             }
         });
     }

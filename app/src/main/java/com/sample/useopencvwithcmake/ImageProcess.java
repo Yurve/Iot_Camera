@@ -25,12 +25,15 @@ public class ImageProcess {
         matResult = mat;
     }
 
+    //현재시간을 구하는 메소드
+    public String saveTime(){
+        //현재 시간
+        return dateName(System.currentTimeMillis());
+    }
+
 
     //사진을 저장하는 메소드 
     public String saveImage() {
-
-        //현재 시간
-        String date = dateName(System.currentTimeMillis());
 
         //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
         // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
@@ -43,19 +46,8 @@ public class ImageProcess {
         bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
 
         //비트맵을 base64로 인코딩
-        String base64String = bitToString(bitmap);
+      return bitToString(bitmap);
 
-        //json 으로 만들기
-        JSONObject jsonObject = new JSONObject();
-        try {
-            jsonObject.put("date", date);
-            jsonObject.put("eventType", "face");
-            jsonObject.put("photoUrl", base64String);
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-        return new Gson().toJson(jsonObject);
     }
 
     //날짜, 시간을 구하는 메소드

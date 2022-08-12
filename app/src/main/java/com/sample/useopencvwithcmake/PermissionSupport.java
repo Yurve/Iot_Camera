@@ -1,19 +1,13 @@
 package com.sample.useopencvwithcmake;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.os.Build;
+import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
-import java.util.ArrayList;
-import java.util.List;
 
 
 
@@ -23,31 +17,11 @@ public class PermissionSupport {
     private final Context context;
     private final Activity activity;
 
-    //요청할 권한 배열 저장 블루투스 connect -> api 31 이상부터는 추가를 해줘야한다.
 
-    //아래는 31 이상
-    @RequiresApi(api = Build.VERSION_CODES.S)
-    private final String[] permissions_S = {
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.BLUETOOTH_ADMIN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.CAMERA,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-    };
-
-    //여기는 31 이하
-    private final String[] permissions = {
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.BLUETOOTH_ADMIN,
-            Manifest.permission.CAMERA,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-    };
-
-
-    private List permissionList;
+  //  private List permissionList;
     //권한 요청시 발생하는 창에 대한 결과값을 받기 위해 지정해주는 int 형
     //원하는 임의의 숫자 지정
-    private final int MULTIPLE_PERMISSIONS = 1023; //요청에 대한 결과값 확인을 위해 RequestCode를 final로 정의
+   public final static int MULTIPLE_PERMISSIONS = 1;  //요청에 대한 결과값 확인을 위해 RequestCode를 final로 정의
 
     //생성자
     public PermissionSupport(Activity activity, Context context) {
@@ -55,39 +29,20 @@ public class PermissionSupport {
         this.context = context;
     }
 
-    //배열로 선언한 권한 중 허용되지 않은 권한 있는지 체크
-    public boolean checkPermission() {
-        permissionList = new ArrayList<>();
 
-        for (String permission : permissions) {
-            int result = ContextCompat.checkSelfPermission(context, permission);
-            if (result != PackageManager.PERMISSION_GRANTED) {
-                permissionList.add(permission);
+
+    //권한 확인
+    public void onCheckPermission(){
+        if(ActivityCompat.checkSelfPermission(context,Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        || ActivityCompat.checkSelfPermission(context,Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+        || ActivityCompat.checkSelfPermission(context,Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
+            if(ActivityCompat.shouldShowRequestPermissionRationale(activity,Manifest.permission.BLUETOOTH_CONNECT)){
+                Toast.makeText(context,"앱 실행을 위해서는 권한을 설정해야 합니다.",Toast.LENGTH_SHORT).show();
+            }else{
+                ActivityCompat.requestPermissions(activity,new String[]{Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.CAMERA,Manifest.permission.WRITE_EXTERNAL_STORAGE},MULTIPLE_PERMISSIONS);
             }
         }
-        return permissionList.isEmpty();
-    }
-
-
-    //배열로 선언한 권한에 대해 사용자에게 허용 요청
-    public void requestPermission() {
-        ActivityCompat.requestPermissions(activity, (String[]) permissionList.toArray
-                (new String[0]), MULTIPLE_PERMISSIONS);
-    }
-
-    //요청한 권한에 대한 결과값 판단 및 처리
-    public boolean permissionResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults){
-        //우선 requestCode가 아까 위에 final로 선언하였던 숫자와 맞는지, 결과값의 길이가 0보다는 큰지 먼저 체크
-        if(requestCode == MULTIPLE_PERMISSIONS && (grantResults.length >0)) {
-            for (int grantResult : grantResults) {
-                //grantResults 가 0이면 사용자가 허용한 것 / -1이면 거부한 것
-                //-1이 있는지 체크하여 하나라도 -1이 나온다면 false를 리턴
-                if (grantResult == -1) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
 
