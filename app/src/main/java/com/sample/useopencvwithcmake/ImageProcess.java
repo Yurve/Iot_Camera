@@ -1,6 +1,7 @@
 package com.sample.useopencvwithcmake;
 
 import android.graphics.Bitmap;
+import android.media.Image;
 import android.util.Base64;
 
 import com.google.gson.Gson;
@@ -38,6 +39,9 @@ public class ImageProcess {
         Bitmap bitmap = Bitmap.createBitmap(matResult.cols(), matResult.rows(), Bitmap.Config.ARGB_8888);
         Utils.matToBitmap(matResult, bitmap);
 
+        //원본파일 1024*576 인데 이상태로 보내면 너무 커서 비율에 맞게 크기를 줄인다.
+        bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
+
         //비트맵을 base64로 인코딩
         String base64String = bitToString(bitmap);
 
@@ -46,7 +50,7 @@ public class ImageProcess {
         try {
             jsonObject.put("date", date);
             jsonObject.put("eventType", "face");
-            jsonObject.put("picture", base64String);  //현재 너무 길어서 그런지 못보냄
+            jsonObject.put("photoUrl", base64String);
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -63,17 +67,20 @@ public class ImageProcess {
 
     //비트맵 객체를 문자열로 변환하는 메소드
     private String bitToString(Bitmap bitmap) {
+
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         //비트맵을 압축해서 전송
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 1, byteArrayOutputStream);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
         //String 으로 반환
         return Base64.encodeToString(image, Base64.NO_WRAP);
+
+
     }
 
 }
