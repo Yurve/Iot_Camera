@@ -28,7 +28,7 @@ public class Bluetooth_connect {
     private BluetoothDevice bluetoothDevice;
 
     private boolean state = true;
-    public int BT_REQUEST_ENABLE = 1;
+    public static final int BT_REQUEST_ENABLE = 200;
     final private static UUID BT_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"); //범용 고유 식별자
 
     //생성자

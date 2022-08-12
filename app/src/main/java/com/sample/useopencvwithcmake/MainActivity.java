@@ -1,16 +1,10 @@
 package com.sample.useopencvwithcmake;
 
 
-import androidx.annotation.RequiresApi;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-
 
 import android.content.res.AssetManager;
 import android.os.Bundle;
-import android.annotation.TargetApi;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
@@ -29,10 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
 import java.util.List;
-
-import static android.Manifest.permission.BLUETOOTH_CONNECT;
-import static android.Manifest.permission.CAMERA;
-import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
@@ -62,16 +52,18 @@ public class MainActivity extends AppCompatActivity
     //화면에 보여주는 카메라뷰
     private CameraBridgeViewBase mOpenCvCameraView;
 
-    //rxJava 를 통한 비동기 처리
-    public final CompositeDisposable disposables = new CompositeDisposable();
-
 
     //블루투스 통신 클래스
-    Bluetooth_connect bluetooth_connect;
+    private Bluetooth_connect bluetooth_connect;
 
     //이미지처리 클래스
-    ImageProcess imageProcess;
+    private ImageProcess imageProcess;
 
+    //권한 요청 클래스
+    private PermissionSupport permissionSupport;
+
+    //비동기
+    private CompositeDisposable disposables;
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -126,7 +118,7 @@ public class MainActivity extends AppCompatActivity
         System.loadLibrary("native-lib");
     }
 
-    // 이코드는 왜 모든 예제에 쓰이는 것인가??????
+
     private final BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
@@ -144,11 +136,16 @@ public class MainActivity extends AppCompatActivity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        //권한 확인하기
+        permissionCheck();
+
         //signalR 서버 접속하기
         String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
+
+        //블루투스 클래스 생성
         bluetooth_connect = new Bluetooth_connect(this);
 
         //블루투스 키기 및 확인
@@ -157,6 +154,9 @@ public class MainActivity extends AppCompatActivity
 
         //페어링 된 기기 알람띄우기
         bluetooth_connect.listPairedDevices();
+
+        //비동기 클래스
+        disposables = new CompositeDisposable();
 
 
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -172,11 +172,35 @@ public class MainActivity extends AppCompatActivity
         mOpenCvCameraView.setCvCameraViewListener(this);
         mOpenCvCameraView.setCameraIndex(1); // front-camera(1),  back-camera(0)
 
+        //비동기로 라즈베리파이 제어
         sensorScheduler();
 
         RxJavaPlugins.setErrorHandler(e -> Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage()));
     }
 
+    //권한 체크
+    private void permissionCheck() {
+
+        //객체 생성
+        permissionSupport = new PermissionSupport(this, this);
+
+        //요청이 안되어있으면
+        if (!permissionSupport.checkPermission()) {
+            //권한 요청
+            permissionSupport.checkPermission();
+        }
+    }
+
+    // Request Permission 대한 결과 값 받고나서
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @androidx.annotation.NonNull String[] permissions, @androidx.annotation.NonNull int[] grantResults) {
+        //여기서도 리턴이 false로 들어온다면 (사용자가 권한 허용 거부)
+        if (!permissionSupport.permissionResult(requestCode, permissions, grantResults)) {
+            //다시 permissions 요청
+            permissionSupport.requestPermission();
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+    }
 
     //사진 저장 비동기 처리
     public void onScheduler() {
@@ -226,12 +250,11 @@ public class MainActivity extends AppCompatActivity
     }
 
     //서버에서 서보모터 제어 신호 비동기처리
-    public void sensorScheduler(){
+    public void sensorScheduler() {
         disposables.add(serverToPi4()
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribeWith(new DisposableObserver<String>()
-                {
+                .subscribeWith(new DisposableObserver<String>() {
                     @Override
                     public void onNext(@NonNull String s) {
                         Log.d(TAG, "onNext(" + s + ")");
@@ -251,28 +274,27 @@ public class MainActivity extends AppCompatActivity
     }
 
     //서버에서 signalR로 받아서 라즈베리파이로 블루투스 송신
-    public Observable<String> serverToPi4(){
+    public Observable<String> serverToPi4() {
         return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
             @Override
             public ObservableSource<? extends String> get() throws Throwable {
                 // Do some long running operation
 
-                hubConnection.on("ReceiveMessage",(user,message) ->{
+                hubConnection.on("ReceiveMessage", (user, message) -> {
                     //블루투스 제어
-                    if(bluetooth_connect.checkThread()){
+                    if (bluetooth_connect.checkThread()) {
                         try {
                             bluetooth_connect.write(message);
-                        }catch (IOException e){
+                        } catch (IOException e) {
                             e.printStackTrace();
                         }
                     }
-                },String.class, String.class);
+                }, String.class, String.class);
 
                 return null;
             }
         });
     }
-
 
 
     @Override
@@ -303,7 +325,7 @@ public class MainActivity extends AppCompatActivity
         //블루투스 연결 끊기
         try {
             bluetooth_connect.close();
-        }catch (IOException e){
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -362,10 +384,6 @@ public class MainActivity extends AppCompatActivity
     }
 
 
-    //여기서부턴 퍼미션 관련 메소드
-    private static final int CAMERA_PERMISSION_REQUEST_CODE = 200;
-
-
     protected void onCameraPermissionGranted() {
         List<? extends CameraBridgeViewBase> cameraViews = getCameraViewList();
         if (cameraViews == null) {
@@ -379,50 +397,12 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.S)
+
     @Override
     protected void onStart() {
         super.onStart();
-        boolean havePermission = true;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(CAMERA) != PackageManager.PERMISSION_GRANTED
-                    || checkSelfPermission(WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                    || checkSelfPermission(BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE, BLUETOOTH_CONNECT}, CAMERA_PERMISSION_REQUEST_CODE);
-                havePermission = false;
-            }
-        }
-        if (havePermission) {
             onCameraPermissionGranted();
         }
-    }
 
-    @Override
-    @TargetApi(Build.VERSION_CODES.M)
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-            onCameraPermissionGranted();
-        } else {
-            showDialogForPermission();
-        }
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-    }
-
-
-    @TargetApi(Build.VERSION_CODES.M)
-    private void showDialogForPermission() {
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-        builder.setTitle("알림");
-        builder.setMessage("앱을 실행하려면 퍼미션을 허가하셔야합니다.");
-        builder.setCancelable(false);
-        builder.setPositiveButton("예", (dialog, id) ->
-                requestPermissions(new String[]{CAMERA, WRITE_EXTERNAL_STORAGE}, CAMERA_PERMISSION_REQUEST_CODE));
-        builder.setNegativeButton("아니오", (arg0, arg1) -> finish());
-        builder.create().show();
-    }
-
-    
 }
+
