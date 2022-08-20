@@ -1,13 +1,8 @@
 package com.sample.useopencvwithcmake;
 
 import android.graphics.Bitmap;
-import android.media.Image;
 import android.util.Base64;
 
-import com.google.gson.Gson;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.opencv.android.Utils;
 import org.opencv.core.Mat;
 
@@ -33,7 +28,7 @@ public class ImageProcess {
 
 
     //사진을 저장하는 메소드 
-    public String saveImage() {
+    public byte[] saveImage() {
 
         //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
         // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
@@ -45,8 +40,9 @@ public class ImageProcess {
         //원본파일 1024*576 인데 이상태로 보내면 너무 커서 비율에 맞게 크기를 줄인다.
         bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
 
-        //비트맵을 base64로 인코딩
-      return bitToString(bitmap);
+        //비트맵을 base64로 인코딩 (x)
+        //우선 바이트 배열로 변환
+      return bitToBytes(bitmap);
 
     }
 
@@ -58,19 +54,21 @@ public class ImageProcess {
     }
 
     //비트맵 객체를 문자열로 변환하는 메소드
-    private String bitToString(Bitmap bitmap) {
+    private byte[] bitToBytes(Bitmap bitmap) {
 
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         //비트맵을 압축해서 전송
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, byteArrayOutputStream);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 50, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
+
+        return image;
         //String 으로 반환
-        return Base64.encodeToString(image, Base64.NO_WRAP);
+        //Base64.encodeToString(image, Base64.NO_WRAP);
 
 
     }

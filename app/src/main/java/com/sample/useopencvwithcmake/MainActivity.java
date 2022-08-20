@@ -209,9 +209,9 @@ public class MainActivity extends AppCompatActivity
                 .subscribeOn(Schedulers.io())
                 // Be notified on the main thread
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribeWith(new DisposableObserver<String>() {
+                .subscribeWith(new DisposableObserver<byte[]>() {
                                    @Override
-                                   public void onNext(@NonNull String msg) {
+                                   public void onNext(@NonNull byte[] msg) {
                                        Log.d(TAG, "onNext(" + msg + ")");
                                    }
 
@@ -230,14 +230,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     //public? static? 상관없는듯
-    public Observable<String> sendImage() {
-        return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
+    public Observable<byte[]> sendImage() {
+        return Observable.defer(new Supplier<ObservableSource<? extends byte[]>>() {
             @Override
-            public ObservableSource<? extends String> get() throws Throwable {
+            public ObservableSource<? extends byte[]> get() throws Throwable {
                 // Do some long running operation
 
                 String date = imageProcess.saveTime();
-                String encodedImage = imageProcess.saveImage();
+                byte[] encodedImage = imageProcess.saveImage();
 
                 //SignalR 전송
                 if (hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
