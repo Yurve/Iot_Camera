@@ -155,8 +155,6 @@ public class MainActivity extends AppCompatActivity
         String TopicName = "TopicName";
 
 
-
-
         //블루투스 클래스 생성
         bluetooth_connect = new Bluetooth_connect(this);
 
@@ -207,7 +205,7 @@ public class MainActivity extends AppCompatActivity
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "권한 확인", Toast.LENGTH_SHORT).show();
             } else {
-               Log.d(TAG,"권한 취소");
+                Log.d(TAG, "권한 취소");
             }
         }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -220,12 +218,13 @@ public class MainActivity extends AppCompatActivity
                 .subscribeOn(Schedulers.io())
                 // Be notified on the main thread)
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribeWith(new DisposableObserver<String>(){
+                .subscribeWith(new DisposableObserver<String>() {
                     @Override
                     public void onNext(@NonNull String msg) {
                         Log.d(TAG, "onNext(" + msg + ")");
 
                     }
+
                     @Override
                     public void onError(@NonNull Throwable e) {
                         Log.e(TAG, "onError()", e);
@@ -242,53 +241,27 @@ public class MainActivity extends AppCompatActivity
     public String current_date;
     public String past_date;
 
-    public boolean diff_time(String current_date, String past_date){
-        //초기에는 past_date가 없다. 그냥 true 리턴하자
-        if(past_date == null){
-            return true;
-        }
-
-        //분 가져오기
-       String current_min = current_date.substring(14,16);
-       int current_minute = Integer.parseInt(current_min);
-       String past_min = past_date.substring(14,16);
-       int past_minute = Integer.parseInt(past_min);
-
-       //초 가져오기
-        String current_sec = current_date.substring(17);
-        int currentSec = Integer.parseInt(current_sec);
-        String past_sec = past_date.substring(17);
-        int pastSec = Integer.parseInt(past_sec);
-
-        int difference = Math.abs(currentSec - pastSec);
-       //분은 같고 초의 차이가 3초 이내라면 보내지 않음
-       if(past_minute == current_minute && difference < 3){
-           return false;
-       }
-
-        return true;
-    }
 
     //public? static? 상관없는듯
-   public Observable<String> sendImage() {
+    public Observable<String> sendImage() {
         return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
             @Override
             public ObservableSource<? extends String> get() throws Throwable {
                 // Do some long running operation
 
 
-                    //시간 비교를 위해 구분
-                    if (CURRENT_TIME == 1) {
-                        current_date = imageProcess.saveTime();
-                    } else {
-                        past_date = imageProcess.saveTime();
-                    }
+                //시간 비교를 위해 구분
+                if (CURRENT_TIME == 1) {
+                    current_date = imageProcess.saveTime();
+                } else {
+                    past_date = imageProcess.saveTime();
+                }
 
-                    //둘의 시간을 비교하는 메소드
-                    boolean ok = diff_time(current_date, past_date);
-                    if (!ok) {
-                        return Observable.just("pass");
-                    }
+                //둘의 시간을 비교하는 메소드
+                boolean ok = imageProcess.diff_time(current_date, past_date);
+                if (!ok) {
+                    return Observable.just("pass");
+                }
 
 
                 String date = imageProcess.saveTime();
@@ -297,16 +270,15 @@ public class MainActivity extends AppCompatActivity
 
                 //json 객체로 전송
                 jsonObject = new JSONObject();
-                jsonObject.put("date",date);
-                jsonObject.put("type",type);
-                jsonObject.put("Image",encodedImage);
+                jsonObject.put("date", date);
+                jsonObject.put("type", type);
+                jsonObject.put("Image", encodedImage);
 
 
                 //mqtt 전송
 
 
-
-                Log.d("JSONObject","전송 성공" + jsonObject);
+                Log.d("JSONObject", "전송 성공" + jsonObject);
 
                 /*
                 //SignalR 전송
@@ -315,16 +287,16 @@ public class MainActivity extends AppCompatActivity
                 }
                  */
 
-                if(CURRENT_TIME ==1 ){
+                if (CURRENT_TIME == 1) {
                     CURRENT_TIME = 0;
-                }else {
-                    CURRENT_TIME =1;
+                } else {
+                    CURRENT_TIME = 1;
                 }
 
                 return Observable.just(encodedImage);
             }
         });
-   }
+    }
 
     //서버에서 서보모터 제어 신호 비동기처리
     public void sensorScheduler() {
@@ -478,8 +450,8 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onStart() {
         super.onStart();
-            onCameraPermissionGranted();
-        }
+        onCameraPermissionGranted();
+    }
 
 }
 
