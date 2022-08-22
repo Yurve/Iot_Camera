@@ -11,7 +11,12 @@ import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -25,9 +30,12 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
+import com.google.gson.Gson;
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
 
@@ -68,7 +76,7 @@ public class MainActivity extends AppCompatActivity
     private JSONObject jsonObject;
 
     //MQTT 클라이언트 만들기
-    private MqttClient mqttClient;
+    private MqttClient mqttClient = null ;
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -146,13 +154,18 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
+        String input = "http://***************";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
         //mqtt 클라이언트 만들기
-        String ServerAddress = "tcp://ictrobot.hknu.ac.kr:8080/mqtt";
-        String TopicName = "TopicName";
+        String ServerAddress = "tcp://*******************";
+        try {
+            mqttClient = new MqttClient(ServerAddress, MqttClient.generateClientId(), null);
+            mqttClient.connect();
+        }catch (MqttException e){
+            e.printStackTrace();
+        }
 
 
         //블루투스 클래스 생성
@@ -184,6 +197,29 @@ public class MainActivity extends AppCompatActivity
 
         //비동기로 라즈베리파이 제어
         sensorScheduler();
+
+        //mqtt 잘보냈는지 확인해보자
+        try {
+            mqttClient.subscribe("TopicName");
+            mqttClient.setCallback(new MqttCallback() {
+                @Override
+                public void connectionLost(Throwable cause) {
+                    Log.d("MQTTService", "Connection Lost");
+                }
+
+                @Override
+                public void messageArrived(String topic, MqttMessage message) throws Exception {
+                    Log.d("MQTTService", "Message Arrived : " + message.toString());
+                }
+
+                @Override
+                public void deliveryComplete(IMqttDeliveryToken token) {
+                    Log.d("MQTTService", "Delivery Complete");
+                }
+            });
+        }catch (MqttException e){
+            e.printStackTrace();
+        }
 
         RxJavaPlugins.setErrorHandler(e -> Log.e("RxJava_HOOK", "Undeliverable exception received, not sure what to do" + e.getMessage()));
     }
@@ -274,18 +310,15 @@ public class MainActivity extends AppCompatActivity
                 jsonObject.put("type", type);
                 jsonObject.put("Image", encodedImage);
 
+                Gson gson = new Gson();
+                String jsonData = gson.toJson(jsonObject);
 
                 //mqtt 전송
+                mqttClient.publish("TopicName",new MqttMessage(jsonData.getBytes(StandardCharsets.UTF_8)));
 
 
                 Log.d("JSONObject", "전송 성공" + jsonObject);
 
-                /*
-                //SignalR 전송
-                if (hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
-                    hubConnection.send("SendMessage",date,jsonObject);
-                }
-                 */
 
                 if (CURRENT_TIME == 1) {
                     CURRENT_TIME = 0;
@@ -384,6 +417,13 @@ public class MainActivity extends AppCompatActivity
         //rxjava 통로 비우기
         disposables.clear();
 
+        //mqtt 끊기
+        try {
+            mqttClient.disconnect();
+            mqttClient.close();
+        }catch (MqttException e){
+            e.printStackTrace();
+        }
         super.onDestroy();
     }
 
