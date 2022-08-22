@@ -28,7 +28,7 @@ public class ImageProcess {
 
 
     //사진을 저장하는 메소드 
-    public byte[] saveImage() {
+    public String saveImage() {
 
         //사진의 색 변환 (원래 openCv는 반전되어있음 RGB가 아니라 BGR로 되어있음 갤러리에 저장할 때 사용)
         // Imgproc.cvtColor(matResult, matResult, Imgproc.COLOR_BGR2RGBA);
@@ -40,9 +40,8 @@ public class ImageProcess {
         //원본파일 1024*576 인데 이상태로 보내면 너무 커서 비율에 맞게 크기를 줄인다.
         bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
 
-        //비트맵을 base64로 인코딩 (x)
-        //우선 바이트 배열로 변환
-      return bitToBytes(bitmap);
+
+      return bitToString(bitmap);
 
     }
 
@@ -54,7 +53,7 @@ public class ImageProcess {
     }
 
     //비트맵 객체를 문자열로 변환하는 메소드
-    private byte[] bitToBytes(Bitmap bitmap) {
+    private String bitToString(Bitmap bitmap) {
 
         //바이트 보낼 통로
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
@@ -65,12 +64,8 @@ public class ImageProcess {
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
-
-        return image;
         //String 으로 반환
-        //Base64.encodeToString(image, Base64.NO_WRAP);
-
-
+         return Base64.encodeToString(image, Base64.NO_WRAP);
     }
 
 }

@@ -11,6 +11,8 @@ import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.LoaderCallbackInterface;
@@ -28,7 +30,6 @@ import java.util.List;
 
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
-import com.microsoft.signalr.HubConnectionState;
 
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Observable;
@@ -54,18 +55,20 @@ public class MainActivity extends AppCompatActivity
     //화면에 보여주는 카메라뷰
     private CameraBridgeViewBase mOpenCvCameraView;
 
-
     //블루투스 통신 클래스
     private Bluetooth_connect bluetooth_connect;
 
     //이미지처리 클래스
     private ImageProcess imageProcess;
 
-    //권한 요청 클래스
-    private PermissionSupport permissionSupport;
-
     //비동기
     private CompositeDisposable disposables;
+
+    //json 객체 만들기
+    private JSONObject jsonObject;
+
+    //MQTT 클라이언트 만들기
+    private MqttClient mqttClient;
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -78,6 +81,7 @@ public class MainActivity extends AppCompatActivity
     public long cascadeClassifier_face = 0;
     public long cascadeClassifier_eye = 0;
 
+    public int CURRENT_TIME = 1;
 
     private void copyFile(String filename) {
 
@@ -142,9 +146,15 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://ictrobot.hknu.ac.kr:8086/eventhub";
+        String input = "http://ictrobot.hknu.ac.kr:8080/chathub";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
+
+        //mqtt 클라이언트 만들기
+        String ServerAddress = "tcp://ictrobot.hknu.ac.kr:8080/mqtt";
+        String TopicName = "TopicName";
+
+
 
 
         //블루투스 클래스 생성
@@ -184,7 +194,8 @@ public class MainActivity extends AppCompatActivity
     private void permissionCheck() {
 
         //객체 생성
-        permissionSupport = new PermissionSupport(this, this);
+        //권한 요청 클래스
+        PermissionSupport permissionSupport = new PermissionSupport(this, this);
 
         permissionSupport.onCheckPermission();
     }
@@ -207,48 +218,113 @@ public class MainActivity extends AppCompatActivity
         disposables.add(sendImage()
                 //run on a background thread
                 .subscribeOn(Schedulers.io())
-                // Be notified on the main thread
+                // Be notified on the main thread)
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribeWith(new DisposableObserver<byte[]>() {
-                                   @Override
-                                   public void onNext(@NonNull byte[] msg) {
-                                       Log.d(TAG, "onNext(" + msg + ")");
-                                   }
+                .subscribeWith(new DisposableObserver<String>(){
+                    @Override
+                    public void onNext(@NonNull String msg) {
+                        Log.d(TAG, "onNext(" + msg + ")");
 
-                                   @Override
-                                   public void onError(@NonNull Throwable e) {
-                                       Log.e(TAG, "onError()", e);
-                                   }
+                    }
+                    @Override
+                    public void onError(@NonNull Throwable e) {
+                        Log.e(TAG, "onError()", e);
+                    }
 
-                                   @Override
-                                   public void onComplete() {
-                                       Log.d(TAG, "onComplete()");
-                                   }
-                               }
-                )
-        );
+                    @Override
+                    public void onComplete() {
+                        Log.d(TAG, "onComplete()");
+                    }
+                }));
+    }
+
+    //이전 시간과 현재시간을 비교해야함.
+    public String current_date;
+    public String past_date;
+
+    public boolean diff_time(String current_date, String past_date){
+        //초기에는 past_date가 없다. 그냥 true 리턴하자
+        if(past_date == null){
+            return true;
+        }
+
+        //분 가져오기
+       String current_min = current_date.substring(14,16);
+       int current_minute = Integer.parseInt(current_min);
+       String past_min = past_date.substring(14,16);
+       int past_minute = Integer.parseInt(past_min);
+
+       //초 가져오기
+        String current_sec = current_date.substring(17);
+        int currentSec = Integer.parseInt(current_sec);
+        String past_sec = past_date.substring(17);
+        int pastSec = Integer.parseInt(past_sec);
+
+        int difference = Math.abs(currentSec - pastSec);
+       //분은 같고 초의 차이가 3초 이내라면 보내지 않음
+       if(past_minute == current_minute && difference < 3){
+           return false;
+       }
+
+        return true;
     }
 
     //public? static? 상관없는듯
-    public Observable<byte[]> sendImage() {
-        return Observable.defer(new Supplier<ObservableSource<? extends byte[]>>() {
+   public Observable<String> sendImage() {
+        return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
             @Override
-            public ObservableSource<? extends byte[]> get() throws Throwable {
+            public ObservableSource<? extends String> get() throws Throwable {
                 // Do some long running operation
 
-                String date = imageProcess.saveTime();
-                byte[] encodedImage = imageProcess.saveImage();
 
+                    //시간 비교를 위해 구분
+                    if (CURRENT_TIME == 1) {
+                        current_date = imageProcess.saveTime();
+                    } else {
+                        past_date = imageProcess.saveTime();
+                    }
+
+                    //둘의 시간을 비교하는 메소드
+                    boolean ok = diff_time(current_date, past_date);
+                    if (!ok) {
+                        return Observable.just("pass");
+                    }
+
+
+                String date = imageProcess.saveTime();
+                String encodedImage = imageProcess.saveImage();
+                String type = "eventType";
+
+                //json 객체로 전송
+                jsonObject = new JSONObject();
+                jsonObject.put("date",date);
+                jsonObject.put("type",type);
+                jsonObject.put("Image",encodedImage);
+
+
+                //mqtt 전송
+
+
+
+                Log.d("JSONObject","전송 성공" + jsonObject);
+
+                /*
                 //SignalR 전송
                 if (hubConnection.getConnectionState() != HubConnectionState.DISCONNECTED) {
-                    String type = "eventType";
-                    hubConnection.send("SendEventAsBase64",date,type,encodedImage);
+                    hubConnection.send("SendMessage",date,jsonObject);
+                }
+                 */
+
+                if(CURRENT_TIME ==1 ){
+                    CURRENT_TIME = 0;
+                }else {
+                    CURRENT_TIME =1;
                 }
 
                 return Observable.just(encodedImage);
             }
         });
-    }
+   }
 
     //서버에서 서보모터 제어 신호 비동기처리
     public void sensorScheduler() {
