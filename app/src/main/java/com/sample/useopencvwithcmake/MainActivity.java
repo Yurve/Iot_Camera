@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
@@ -76,7 +77,7 @@ public class MainActivity extends AppCompatActivity
     private JSONObject jsonObject;
 
     //MQTT 클라이언트 만들기
-    private MqttClient mqttClient = null ;
+    private MqttClient mqttClient = null;
 
     // public native void ConvertRGBtoGray(long matAddrInput, long matAddrResult);
     // OpenCV 네이티브 라이브러리와 C++코드로 빌드된 라이브러리를 읽음
@@ -154,16 +155,27 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://***************";
+        String input = "http://******************";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
+        //mqtt 클라이언트 아이디 설정 - MAC 주소
+        MacAddrThread macAddrThread = new MacAddrThread();
+        macAddrThread.start();
+        try{
+            macAddrThread.join();
+        }catch (InterruptedException e){
+            e.printStackTrace();
+        }
+        String mqttId = macAddrThread.macAddress;
+
+
         //mqtt 클라이언트 만들기
-        String ServerAddress = "tcp://*******************";
+        String ServerAddress = "tcp://***************";
         try {
-            mqttClient = new MqttClient(ServerAddress, MqttClient.generateClientId(), null);
+            mqttClient = new MqttClient(ServerAddress, mqttId, null);
             mqttClient.connect();
-        }catch (MqttException e){
+        } catch (MqttException e) {
             e.printStackTrace();
         }
 
@@ -217,7 +229,7 @@ public class MainActivity extends AppCompatActivity
                     Log.d("MQTTService", "Delivery Complete");
                 }
             });
-        }catch (MqttException e){
+        } catch (MqttException e) {
             e.printStackTrace();
         }
 
@@ -274,8 +286,8 @@ public class MainActivity extends AppCompatActivity
     }
 
     //이전 시간과 현재시간을 비교해야함.
-    public String current_date;
-    public String past_date;
+    public Long current_date;
+    public Long past_date;
 
 
     //public? static? 상관없는듯
@@ -288,9 +300,9 @@ public class MainActivity extends AppCompatActivity
 
                 //시간 비교를 위해 구분
                 if (CURRENT_TIME == 1) {
-                    current_date = imageProcess.saveTime();
+                    current_date = SystemClock.elapsedRealtime();
                 } else {
-                    past_date = imageProcess.saveTime();
+                    past_date = SystemClock.elapsedRealtime();
                 }
 
                 //둘의 시간을 비교하는 메소드
@@ -314,7 +326,7 @@ public class MainActivity extends AppCompatActivity
                 String jsonData = gson.toJson(jsonObject);
 
                 //mqtt 전송
-                mqttClient.publish("TopicName",new MqttMessage(jsonData.getBytes(StandardCharsets.UTF_8)));
+                mqttClient.publish("TopicName", new MqttMessage(jsonData.getBytes(StandardCharsets.UTF_8)));
 
 
                 Log.d("JSONObject", "전송 성공" + jsonObject);
@@ -421,7 +433,7 @@ public class MainActivity extends AppCompatActivity
         try {
             mqttClient.disconnect();
             mqttClient.close();
-        }catch (MqttException e){
+        } catch (MqttException e) {
             e.printStackTrace();
         }
         super.onDestroy();

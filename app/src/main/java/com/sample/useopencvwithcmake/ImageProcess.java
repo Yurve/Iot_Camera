@@ -70,35 +70,17 @@ public class ImageProcess {
 
 
     //시간 차이를 비교하는 메소드
-    public boolean diff_time(String current_date, String past_date) {
+    public boolean diff_time(Long current_date, Long past_date) {
         //초기에는 past_date 가 없다. 그냥 true 리턴하자
         if (past_date == null) {
             return true;
         }
 
-        //분 가져오기
-        String current_min = current_date.substring(14, 16);
-        int current_minute = Integer.parseInt(current_min);
-        String past_min = past_date.substring(14, 16);
-        int past_minute = Integer.parseInt(past_min);
-
-        //초 가져오기
-        String current_sec = current_date.substring(17);
-        int currentSec = Integer.parseInt(current_sec);
-        String past_sec = past_date.substring(17);
-        int pastSec = Integer.parseInt(past_sec);
-
-        int differenceMin = Math.abs(current_minute - past_minute);
-        int differenceSec = Math.abs(currentSec - pastSec);
-        //분은 같고 초의 차이가 3초 이내라면 보내지 않음
-        if (past_minute == current_minute && differenceSec < 3) {
+        //시간차이 구하기
+        long difference = Math.abs(current_date - past_date);
+        //3초 이내라면 사진 전송을 하지 않는다.
+        if(difference <3000 ){
             return false;
-        }
-        //초 말고 분이 바뀌는 부분도 고려해야한다.
-        else if(differenceMin == 1 && differenceSec > 57){
-            return false;
-        }
-
-        return true;
+        }else return true;
     }
 }
