@@ -55,7 +55,7 @@ Java_com_sample_useopencvwithcmake_MainActivity_loadCascade(JNIEnv *env, jobject
 
 
 extern "C"
-JNIEXPORT jint JNICALL
+JNIEXPORT jdoubleArray JNICALL
 Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz,
                                                        jlong cascade_classifier_face,
                                                        jlong cascade_classifier_eye,
@@ -84,6 +84,7 @@ Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz
                         (char *) "face %d found ", faces.size());
 
     int faceSize = faces.size();
+    double rect_area[5];
     for (int i = 0; i < faceSize; i++) {
         double real_facesize_x = faces[i].x / resizeRatio;
         double real_facesize_y = faces[i].y / resizeRatio;
@@ -96,6 +97,10 @@ Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz
 
 
         Rect face_area(real_facesize_x, real_facesize_y, real_facesize_width,real_facesize_height);
+        rect_area[0] = real_facesize_x;
+        rect_area[1] = real_facesize_y;
+        rect_area[2] = real_facesize_width;
+        rect_area[3] = real_facesize_height;
         Mat faceROI = img_gray( face_area );
         std::vector<Rect> eyes;
 
@@ -109,7 +114,17 @@ Java_com_sample_useopencvwithcmake_MainActivity_detect(JNIEnv *env, jobject thiz
             circle( img_result, eye_center, radius, Scalar( 255, 0, 0 ), 30, 8, 0 );
         }
     }
+    double faceDoubleSize(faceSize);
+    rect_area[4] = faceDoubleSize;
 
-    return faceSize;
+
+    //https://blog.daum.net/rhaoslikesan/231
+    jdoubleArray jArray = (*env).NewDoubleArray(5);
+
+    (*env).SetDoubleArrayRegion(jArray,0,5,rect_area);
+
+
+    return jArray;
 
 }
+

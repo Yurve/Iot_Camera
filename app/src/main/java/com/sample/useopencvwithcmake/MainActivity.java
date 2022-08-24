@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
@@ -17,7 +18,6 @@ import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.json.JSONObject;
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -25,13 +25,13 @@ import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
+import org.opencv.core.Rect;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
@@ -84,13 +84,16 @@ public class MainActivity extends AppCompatActivity
 
     public native long loadCascade(String cascadeFileName);
 
-    public native int detect(long cascadeClassifier_face,
-                             long cascadeClassifier_eye, long matAddrInput, long matAddrResult);
+    public native double[] detect(long cascadeClassifier_face,
+                                  long cascadeClassifier_eye, long matAddrInput, long matAddrResult);
+
 
     public long cascadeClassifier_face = 0;
     public long cascadeClassifier_eye = 0;
 
     public int CURRENT_TIME = 1;
+
+    public String macId;
 
     private void copyFile(String filename) {
 
@@ -155,25 +158,25 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://******************";
+        String input = "http://*****************8";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
         //mqtt 클라이언트 아이디 설정 - MAC 주소
         MacAddrThread macAddrThread = new MacAddrThread();
         macAddrThread.start();
-        try{
+        try {
             macAddrThread.join();
-        }catch (InterruptedException e){
+        } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        String mqttId = macAddrThread.macAddress;
+        macId = macAddrThread.macAddress;
 
 
         //mqtt 클라이언트 만들기
-        String ServerAddress = "tcp://***************";
+        String ServerAddress = "tcp://*******************";
         try {
-            mqttClient = new MqttClient(ServerAddress, mqttId, null);
+            mqttClient = new MqttClient(ServerAddress, macId, null);
             mqttClient.connect();
         } catch (MqttException e) {
             e.printStackTrace();
@@ -220,7 +223,7 @@ public class MainActivity extends AppCompatActivity
                 }
 
                 @Override
-                public void messageArrived(String topic, MqttMessage message) throws Exception {
+                public void messageArrived(String topic, MqttMessage message) {
                     Log.d("MQTTService", "Message Arrived : " + message.toString());
                 }
 
@@ -318,6 +321,7 @@ public class MainActivity extends AppCompatActivity
 
                 //json 객체로 전송
                 jsonObject = new JSONObject();
+                jsonObject.put("addr", macId);
                 jsonObject.put("date", date);
                 jsonObject.put("type", type);
                 jsonObject.put("Image", encodedImage);
@@ -413,6 +417,7 @@ public class MainActivity extends AppCompatActivity
 
 
     public void onDestroy() {
+        //화면 보여주기 끊기
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
 
@@ -423,13 +428,13 @@ public class MainActivity extends AppCompatActivity
             e.printStackTrace();
         }
 
-        //서버 연결 끊기
+        //SignalR(서버로 부터 모터제어 수신 터널) 끊기
         hubConnection.stop();
 
-        //rxjava 통로 비우기
+        //rxjava(비동기) 통로 비우기
         disposables.clear();
 
-        //mqtt 끊기
+        //mqtt(사진 및 사진 정보 송신 터널) 끊기
         try {
             mqttClient.disconnect();
             mqttClient.close();
@@ -454,6 +459,7 @@ public class MainActivity extends AppCompatActivity
 
     }
 
+
     //동그라미 검출 메소드
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
@@ -467,11 +473,30 @@ public class MainActivity extends AppCompatActivity
 
         Core.flip(matInput, matInput, 1);
 
-        int faceSize = detect(cascadeClassifier_face, cascadeClassifier_eye, matInput.getNativeObjAddr(),
-                matResult.getNativeObjAddr());
+        double[] doubles;
+
+        //이 배열 안에는  (가장 왼쪽의)X좌표,(가장 왼쪽의)Y좌표,넓이,높이,얼굴의 갯수 가 들어있다.
+        doubles = detect(cascadeClassifier_face, cascadeClassifier_eye, matInput.getNativeObjAddr(), matResult.getNativeObjAddr());
+
+        //배열에있는 애들 꺼내오기 + rect 객체에는 int 들어감
+        int x = (int) doubles[0];
+        int y = (int) doubles[1];
+        int width = (int) doubles[2];
+        int height = (int) doubles[3];
+
+        //사각형의 좌표 값 저장
+        Rect rect = new Rect(x, y, width, height);
+
+        Mat faceROI = new Mat(matResult, rect);
+        imageProcess = new ImageProcess(faceROI);
+
+        //이제 이미지 처리를 ROI 자른걸로 넣어야함.
+        // imageProcess = new ImageProcess(matResult);
 
 
-        imageProcess = new ImageProcess(matResult);
+        //가장 마지막 배열에 얼굴의 갯수가 들어있음.
+        double faceSize = doubles[4];
+
         if (faceSize > 0) {
             onScheduler();
         }

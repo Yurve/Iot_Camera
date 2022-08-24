@@ -81,29 +81,29 @@ public class Bluetooth_connect {
     }
 
     //클릭된 디바이스 블루투스 연결
-    public void connectSelectDevice(String selectedDeviceName) throws SecurityException{
-        for(BluetoothDevice device : PairedBluetoothDevices){
-            if(selectedDeviceName.equals(device.getName())){
+    public void connectSelectDevice(String selectedDeviceName) throws SecurityException {
+        for (BluetoothDevice device : PairedBluetoothDevices) {
+            if (selectedDeviceName.equals(device.getName())) {
                 bluetoothDevice = device;
                 break;
             }
         }
-        try{
+        try {
             BluetoothSocket bluetoothSocket = bluetoothDevice.createRfcommSocketToServiceRecord(BT_UUID);
             bluetoothSocket.connect();
             connectedBluetoothThread = new ConnectedBluetoothThread(bluetoothSocket);
             connectedBluetoothThread.start();
-            Toast.makeText(context,"연결 성공!",Toast.LENGTH_SHORT).show();
-        }catch (IOException e){
-            Toast.makeText(context,"블루투스 연결 중 오류 발생",Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "연결 성공!", Toast.LENGTH_SHORT).show();
+        } catch (IOException e) {
+            Toast.makeText(context, "블루투스 연결 중 오류 발생", Toast.LENGTH_SHORT).show();
         }
     }
 
-    public void close() throws IOException{
+    public void close() throws IOException {
         connectedBluetoothThread.cancel();
     }
 
-    public void write(String str) throws IOException{
+    public void write(String str) throws IOException {
         connectedBluetoothThread.write(str);
     }
 

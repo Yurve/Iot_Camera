@@ -16,12 +16,12 @@ public class ImageProcess {
     Mat matResult;
 
     //생성자
-    public ImageProcess(Mat mat){
+    public ImageProcess(Mat mat) {
         matResult = mat;
     }
 
     //현재시간을 구하는 메소드
-    public String saveTime(){
+    public String saveTime() {
         //현재 시간
         return dateName(System.currentTimeMillis());
     }
@@ -38,10 +38,14 @@ public class ImageProcess {
         Utils.matToBitmap(matResult, bitmap);
 
         //원본파일 1024*576 인데 이상태로 보내면 너무 커서 비율에 맞게 크기를 줄인다.
-        bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
+        //bitmap = Bitmap.createScaledBitmap(bitmap,533,300,true);
+
+        //전체를 보내는게 아니라 특정 부분만 보내면 비율때문에 줄이기 쉽지 않을 것 같다... 어떻게 해야할까?
+        //우선 원본비율로 보내고 문제가 되면 줄여보자.
+        bitmap = Bitmap.createScaledBitmap(bitmap, matResult.cols(), matResult.height(), true);
 
 
-      return bitToString(bitmap);
+        return bitToString(bitmap);
 
     }
 
@@ -59,13 +63,13 @@ public class ImageProcess {
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
 
         //비트맵을 압축해서 전송
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 50, byteArrayOutputStream);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, byteArrayOutputStream);
 
         //바이트 배열로 받기
         byte[] image = byteArrayOutputStream.toByteArray();
 
         //String 으로 반환
-         return Base64.encodeToString(image, Base64.NO_WRAP);
+        return Base64.encodeToString(image, Base64.NO_WRAP);
     }
 
 
@@ -79,8 +83,8 @@ public class ImageProcess {
         //시간차이 구하기
         long difference = Math.abs(current_date - past_date);
         //3초 이내라면 사진 전송을 하지 않는다.
-        if(difference <3000 ){
+        if (difference < 3000) {
             return false;
-        }else return true;
+        } else return true;
     }
 }
