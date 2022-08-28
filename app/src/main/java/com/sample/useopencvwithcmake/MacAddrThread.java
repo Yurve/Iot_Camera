@@ -17,7 +17,7 @@ public class MacAddrThread extends Thread {
         // https://stackoverflow.com/a/41822127
         try {
             Socket socket = new Socket();
-            SocketAddress endpoint = new InetSocketAddress("*********", 8085);
+            SocketAddress endpoint = new InetSocketAddress("**********", 8085);
             socket.connect(endpoint);
             InetAddress localAddress = socket.getLocalAddress();
 

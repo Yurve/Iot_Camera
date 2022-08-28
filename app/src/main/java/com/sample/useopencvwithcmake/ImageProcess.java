@@ -23,7 +23,9 @@ public class ImageProcess {
     //현재시간을 구하는 메소드
     public String saveTime() {
         //현재 시간
-        return dateName(System.currentTimeMillis());
+        Date date = new Date(System.currentTimeMillis());
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.KOREA);
+        return dateFormat.format(date);
     }
 
 
@@ -47,13 +49,6 @@ public class ImageProcess {
 
         return bitToString(bitmap);
 
-    }
-
-    //날짜, 시간을 구하는 메소드
-    private String dateName(long dateTaken) {
-        Date date = new Date(dateTaken);
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.KOREA);
-        return dateFormat.format(date);
     }
 
     //비트맵 객체를 문자열로 변환하는 메소드

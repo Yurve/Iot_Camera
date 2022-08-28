@@ -5,7 +5,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
-import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
@@ -36,7 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
-import com.google.gson.Gson;
 import com.microsoft.signalr.HubConnection;
 import com.microsoft.signalr.HubConnectionBuilder;
 
@@ -95,6 +93,7 @@ public class MainActivity extends AppCompatActivity
 
     public String macId;
 
+    //assets 파일들은 바로 쓸 수 없다. 불러오는 메소드
     private void copyFile(String filename) {
 
         AssetManager assetManager = this.getAssets();
@@ -158,7 +157,7 @@ public class MainActivity extends AppCompatActivity
         permissionCheck();
 
         //signalR 서버 접속하기
-        String input = "http://*****************8";
+        String input = "http://***************";
         hubConnection = HubConnectionBuilder.create(input).build();
         hubConnection.start().blockingAwait();
 
@@ -174,7 +173,7 @@ public class MainActivity extends AppCompatActivity
 
 
         //mqtt 클라이언트 만들기
-        String ServerAddress = "tcp://*******************";
+        String ServerAddress = "tcp://****************";
         try {
             mqttClient = new MqttClient(ServerAddress, macId, null);
             mqttClient.connect();
@@ -215,7 +214,7 @@ public class MainActivity extends AppCompatActivity
 
         //mqtt 잘보냈는지 확인해보자
         try {
-            mqttClient.subscribe("TopicName");
+            mqttClient.subscribe("aics/event/topic/1");
             mqttClient.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
@@ -262,7 +261,7 @@ public class MainActivity extends AppCompatActivity
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
-    //사진 저장 비동기 처리
+    //구독 메소드 <- sendImage()라는 메소득 진행되면 알아서 이 메소드도 실행
     public void onScheduler() {
         disposables.add(sendImage()
                 //run on a background thread
@@ -292,8 +291,7 @@ public class MainActivity extends AppCompatActivity
     public Long current_date;
     public Long past_date;
 
-
-    //public? static? 상관없는듯
+    //비동기로 사진 정보 전송 메소드
     public Observable<String> sendImage() {
         return Observable.defer(new Supplier<ObservableSource<? extends String>>() {
             @Override
@@ -301,8 +299,11 @@ public class MainActivity extends AppCompatActivity
                 // Do some long running operation
 
 
-                //시간 비교를 위해 구분
+                //시간 비교를 위해 구분 1일때는 current_date에 저장, 0일 떄는 past_date에 저장된다.
+                //아래 '//전송에 성공한 경우, 1-> 0으로 바꾸거나, 0 -> 1 로 바꾸어서 사진이 저장되는 시간을 다른 곳에 저장한다.'라고 저장한 함수가
+                //실행 되면 다음 사진이 저장될 때 저장하는 시간을 다른 곳에 넣는다.(current_date -> past_date) or (past_date -> current_date)
                 if (CURRENT_TIME == 1) {
+                    //현재시간을 구하는 함수, 정확히는 핸드폰이 켜지고 난 이후 부터의 절대적인 시간, 시간 비교를 할 떄 주로 사용된다.
                     current_date = SystemClock.elapsedRealtime();
                 } else {
                     past_date = SystemClock.elapsedRealtime();
@@ -326,16 +327,17 @@ public class MainActivity extends AppCompatActivity
                 jsonObject.put("type", type);
                 jsonObject.put("Image", encodedImage);
 
-                Gson gson = new Gson();
-                String jsonData = gson.toJson(jsonObject);
+                //json 객체 -> 문자열
+                String jsonString = jsonObject.toString();
 
                 //mqtt 전송
-                mqttClient.publish("TopicName", new MqttMessage(jsonData.getBytes(StandardCharsets.UTF_8)));
+                mqttClient.publish("aics/topic/event", new MqttMessage(jsonString.getBytes(StandardCharsets.UTF_8)));
 
 
                 Log.d("JSONObject", "전송 성공" + jsonObject);
 
 
+                //전송에 성공한 경우, 1-> 0으로 바꾸거나, 0 -> 1 로 바꾸어서 사진이 저장되는 시간을 다른 곳에 저장한다.
                 if (CURRENT_TIME == 1) {
                     CURRENT_TIME = 0;
                 } else {
@@ -347,7 +349,7 @@ public class MainActivity extends AppCompatActivity
         });
     }
 
-    //서버에서 서보모터 제어 신호 비동기처리
+    //서버에서 서보모터 제어 신호 비동기처리, 구독 메소드로, servoToPi4()라는 메소드가 실행되면 이 메소드도 실행
     public void sensorScheduler() {
         disposables.add(serverToPi4()
                 .subscribeOn(Schedulers.io())
@@ -389,7 +391,7 @@ public class MainActivity extends AppCompatActivity
                     }
                 }, String.class, String.class);
 
-                return null;
+                return Observable.just("bluetooth success");
             }
         });
     }
@@ -464,8 +466,10 @@ public class MainActivity extends AppCompatActivity
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
 
+        //inputFrame 을 매트릭스 객체로 변환, openCV에 이용하려고
         Mat matInput = inputFrame.rgba();
 
+        //화면에 보여줄 matResult
         if (matResult == null)
 
             matResult = new Mat(matInput.rows(), matInput.cols(), matInput.type());
@@ -487,12 +491,10 @@ public class MainActivity extends AppCompatActivity
         //사각형의 좌표 값 저장
         Rect rect = new Rect(x, y, width, height);
 
+        //위의 사각형 좌표(ROI) 만큼 매트릭스를 자름
         Mat faceROI = new Mat(matResult, rect);
+        //매트릭스 객체를 가공하는 클래스 (base64를 하거나, 사진의 날짜를 구하는 메소드 등이 있다.)
         imageProcess = new ImageProcess(faceROI);
-
-        //이제 이미지 처리를 ROI 자른걸로 넣어야함.
-        // imageProcess = new ImageProcess(matResult);
-
 
         //가장 마지막 배열에 얼굴의 갯수가 들어있음.
         double faceSize = doubles[4];
